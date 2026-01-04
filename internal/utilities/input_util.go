@@ -6,25 +6,38 @@ import (
 	"strings"
 )
 
-// ParseHeaders parses the input headers string into a map.
-func ParseHeaders(headersStr string) (map[string]string, error) {
-	headers := make(map[string]string)
-	headersStr = strings.TrimSpace(headersStr)
+// ParseHeaders parses the input headers slice into a map.
+func ParseHeaders(headers []string) (map[string]string, error) {
+	headerMap := make(map[string]string)
 
-	if len(headersStr) == 0 {
-		return headers, nil
-	}
+	for _, h := range headers {
+		h = strings.TrimSpace(h)
+		if h == "" {
+			continue
+		}
 
-	var headerMap map[string]string
-	err := json.Unmarshal([]byte(headersStr), &headerMap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse headers: %v", err)
+		// Support both JSON format and "Key: Value" format
+		if strings.HasPrefix(h, "{") && strings.HasSuffix(h, "}") {
+			var m map[string]string
+			if err := json.Unmarshal([]byte(h), &m); err == nil {
+				for k, v := range m {
+					headerMap[k] = v
+				}
+				continue
+			}
+		}
+
+		parts := strings.SplitN(h, ":", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid header format: %s. Expected 'Key: Value'", h)
+		}
+		headerMap[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
 	}
 
 	return headerMap, nil
 }
 
-// ParseBody parses the input body string into a JSON byte slice.
+// ParseBody parses the input body string into a byte slice.
 func ParseBody(bodyStr string) ([]byte, error) {
 	bodyStr = strings.TrimSpace(bodyStr)
 
@@ -32,33 +45,35 @@ func ParseBody(bodyStr string) ([]byte, error) {
 		return []byte{}, nil
 	}
 
-	if !strings.HasPrefix(bodyStr, "{") || !strings.HasSuffix(bodyStr, "}") {
-		return nil, fmt.Errorf("invalid body format: %s", bodyStr)
+	// If it's valid JSON, return it as is
+	if json.Valid([]byte(bodyStr)) {
+		return []byte(bodyStr), nil
 	}
 
-	bodyStr = strings.TrimPrefix(bodyStr, "{")
-	bodyStr = strings.TrimSuffix(bodyStr, "}")
+	// Fallback to simplified format: {key:value,key2:value2}
+	if strings.HasPrefix(bodyStr, "{") && strings.HasSuffix(bodyStr, "}") {
+		content := bodyStr[1 : len(bodyStr)-1]
+		keyValuePairs := strings.Split(content, ",")
+		data := make(map[string]interface{})
 
-	keyValuePairs := strings.Split(bodyStr, ",")
+		for _, kvPair := range keyValuePairs {
+			parts := strings.SplitN(kvPair, ":", 2)
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid body format")
+			}
 
-	data := make(map[string]interface{})
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
 
-	for _, kvPair := range keyValuePairs {
-		parts := strings.Split(kvPair, ":")
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid body format")
+			// Try to remove surrounding quotes if present (poor man's unquote)
+			key = strings.Trim(key, "\"'")
+			value = strings.Trim(value, "\"'")
+
+			data[key] = value
 		}
-
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		data[key] = value
+		return json.Marshal(data)
 	}
 
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		panic(err)
-	}
-
-	return jsonData, nil
+	// If neither, just return as raw bytes
+	return []byte(bodyStr), nil
 }

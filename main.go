@@ -8,6 +8,7 @@ import (
 	"github.com/alexflint/go-arg"
 
 	"github.com/knbr13/http-client/internal/httpmethods"
+	"github.com/knbr13/http-client/internal/output"
 )
 
 func main() {
@@ -23,16 +24,16 @@ func main() {
 	switch strings.ToLower(input.HTTPMethod) {
 	case "head":
 		// For HEAD request, only print the response status
-		printColoredHeaders(httpResponse.Header)
+		output.PrintColoredHeaders(httpResponse.Header)
 	default:
 		// For other requests, print the response body
 		body, err := io.ReadAll(httpResponse.Body)
 		if err != nil {
 			log.Fatal(err)
 		}
-		printColoredBody(body)
+		output.PrintColoredBody(body)
 		if input.Output != "" {
-			err = writeToFile(input.Output, body)
+			err = output.WriteToFile(input.Output, body)
 			if err != nil {
 				log.Fatal(err)
 			}

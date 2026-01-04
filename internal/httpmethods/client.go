@@ -8,12 +8,6 @@ import (
 	"time"
 )
 
-type Command struct {
-	Name  string
-	Short string
-	Run   func(Input) (*http.Response, error)
-}
-
 var AvailableHttpMethods = []string{
 	"GET",
 	"POST",
@@ -25,11 +19,11 @@ var AvailableHttpMethods = []string{
 }
 
 type Input struct {
-	HTTPMethod string `arg:"-m,--http-method,required"`
-	URL        string `arg:"-u,--url,required"`
-	Body       string `arg:"-b,--body"`
-	Header     string `arg:"-H,--header"`
-	Output     string `arg:"-o"`
+	HTTPMethod string   `arg:"-m,--http-method,required"`
+	URL        string   `arg:"-u,--url,required"`
+	Body       string   `arg:"-b,--body"`
+	Header     []string `arg:"-H,--header,separate"`
+	Output     string   `arg:"-o"`
 }
 
 var httpClient *http.Client = &http.Client{
