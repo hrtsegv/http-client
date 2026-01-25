@@ -11,7 +11,7 @@ HTTP Client is a command-line tool for executing HTTP requests. It supports vari
 1. Clone the repository:
 
    ```shell
-   git clone https://github.com/knbr13/http-client.git
+   git clone https://github.com/aladdin-io/http-client.git
    ```
 2. Build the project:
    ```shell
@@ -73,5 +73,5 @@ Contributions are welcome! If you would like to contribute to this project, plea
 
 ## License
 
-This project is licensed under the [MIT License](https://github.com/knbr13/http-client/blob/main/LICENSE). See the [LICENSE](https://github.com/knbr13/http-client/blob/main/LICENSE) file for details.
+This project is licensed under the [MIT License](https://github.com/aladdin-io/http-client/blob/main/LICENSE). See the [LICENSE](https://github.com/aladdin-io/http-client/blob/main/LICENSE) file for details.
 

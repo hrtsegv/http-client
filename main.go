@@ -7,8 +7,8 @@ import (
 
 	"github.com/alexflint/go-arg"
 
-	"github.com/knbr13/http-client/internal/httpmethods"
-	"github.com/knbr13/http-client/internal/output"
+	"github.com/aladdin-io/http-client/internal/httpmethods"
+	"github.com/aladdin-io/http-client/internal/output"
 )
 
 func main() {

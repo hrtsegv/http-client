@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"net/http"
 
-	"github.com/knbr13/http-client/internal/utilities"
+	"github.com/aladdin-io/http-client/internal/utilities"
 )
 
 func exec(input Input) (*http.Response, error) {
