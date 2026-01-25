@@ -1,4 +1,4 @@
-module github.com/knbr13/http-client
+module github.com/aladdin-io/http-client
 
 go 1.25
 
