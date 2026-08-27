@@ -40,6 +40,18 @@ type Input struct {
 	NoColor    bool          `arg:"--no-color" help:"Disable colored output"`
 }
 
+// Version implements go-arg's Versioned interface, enabling an automatic
+// --version flag.
+func (Input) Version() string {
+	return "http-client " + Version
+}
+
+// Description implements go-arg's Described interface, shown at the top
+// of --help output.
+func (Input) Description() string {
+	return "http-client sends HTTP requests from the command line."
+}
+
 func RunHttpMethod(input Input) (*Result, error) {
 
 	if ok := slices.Contains(AvailableHttpMethods, strings.ToUpper(input.HTTPMethod)); !ok {
