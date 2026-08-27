@@ -27,7 +27,7 @@ func Run(input httpmethods.Input) int {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
-	defer result.Response.Body.Close()
+	defer func() { _ = result.Response.Body.Close() }()
 
 	output.PrintStatusLine(result.Response, result.Elapsed)
 

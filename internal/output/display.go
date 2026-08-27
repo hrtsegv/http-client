@@ -1,7 +1,6 @@
 package output
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -126,25 +125,11 @@ func WriteToFile(fileName string, data []byte) error {
 		return errors.New("missing file name")
 	}
 
-	// Use O_TRUNC instead of O_APPEND for typical -o behavior,
-	// or keep O_APPEND if that's what's intended.
-	// Usually -o overwrites.
-	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-
-	defer file.Close()
-
-	dataWriter := bufio.NewWriter(file)
-
-	_, err = dataWriter.WriteString(string(data))
-	if err != nil {
+	if err := os.WriteFile(fileName, data, 0o644); err != nil {
 		return err
 	}
 
 	color.Greenp("Saved to ", fileName, "\n")
-	dataWriter.Flush()
 
 	return nil
 }

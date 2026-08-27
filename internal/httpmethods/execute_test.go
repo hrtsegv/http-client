@@ -32,7 +32,7 @@ func TestExec_MethodHeaderBodyPassthrough(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
-	defer result.Response.Body.Close()
+	defer func() { _ = result.Response.Body.Close() }()
 
 	if gotMethod != "POST" {
 		t.Errorf("method = %q, want POST", gotMethod)
@@ -67,7 +67,7 @@ func TestExec_DefaultContentTypeAndUserAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
-	defer result.Response.Body.Close()
+	defer func() { _ = result.Response.Body.Close() }()
 
 	if gotContentType != "application/json" {
 		t.Errorf("Content-Type = %q, want application/json", gotContentType)
@@ -90,7 +90,7 @@ func TestExec_NoBodyOmitsBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
-	result.Response.Body.Close()
+	_ = result.Response.Body.Close()
 }
 
 func TestExec_Auth(t *testing.T) {
@@ -106,7 +106,7 @@ func TestExec_Auth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
-	result.Response.Body.Close()
+	_ = result.Response.Body.Close()
 
 	if !gotOK || gotUser != "alice" || gotPass != "secret" {
 		t.Errorf("BasicAuth() = (%q, %q, %v), want (alice, secret, true)", gotUser, gotPass, gotOK)
@@ -142,7 +142,7 @@ func TestExec_NoRedirect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
-	defer result.Response.Body.Close()
+	defer func() { _ = result.Response.Body.Close() }()
 
 	if result.Response.StatusCode != http.StatusFound {
 		t.Errorf("status = %d, want %d (redirect not followed)", result.Response.StatusCode, http.StatusFound)
@@ -166,7 +166,7 @@ func TestExec_Insecure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunHttpMethod() with --insecure error = %v", err)
 	}
-	defer result.Response.Body.Close()
+	defer func() { _ = result.Response.Body.Close() }()
 
 	if result.Response.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want %d", result.Response.StatusCode, http.StatusOK)

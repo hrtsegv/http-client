@@ -36,7 +36,9 @@ func captureStdout(t *testing.T, fn func()) string {
 
 	fn()
 
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("w.Close() error = %v", err)
+	}
 	out, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("io.ReadAll() error = %v", err)
@@ -55,7 +57,7 @@ func TestPrintColoredBody_SortedKeys(t *testing.T) {
 	iMango := strings.Index(out, "mango")
 	iZebra := strings.Index(out, "zebra")
 
-	if !(iApple < iMango && iMango < iZebra) {
+	if iApple >= iMango || iMango >= iZebra {
 		t.Errorf("keys not printed in sorted order, got: %s", out)
 	}
 }
