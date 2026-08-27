@@ -51,6 +51,14 @@ func exec(input Input) (*Result, error) {
 		req.Header.Set("User-Agent", "http-client/"+Version)
 	}
 
+	if input.Auth != "" && req.Header.Get("Authorization") == "" {
+		user, pass, ok := strings.Cut(input.Auth, ":")
+		if !ok {
+			return nil, fmt.Errorf("invalid --auth value: expected user:pass")
+		}
+		req.SetBasicAuth(user, pass)
+	}
+
 	client := newHTTPClient(input)
 
 	start := time.Now()

@@ -34,6 +34,7 @@ type Input struct {
 	Timeout    time.Duration `arg:"--timeout" default:"30s" help:"Request timeout"`
 	Insecure   bool          `arg:"-k,--insecure" help:"Skip TLS certificate verification"`
 	NoRedirect bool          `arg:"--no-redirect" help:"Do not follow redirects"`
+	Auth       string        `arg:"-a,--auth" help:"Basic auth credentials as user:pass"`
 }
 
 func RunHttpMethod(input Input) (*Result, error) {
