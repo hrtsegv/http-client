@@ -19,9 +19,10 @@ var AvailableHttpMethods = []string{
 }
 
 type Input struct {
-	HTTPMethod string   `arg:"-m,--http-method,required"`
-	URL        string   `arg:"-u,--url,required"`
-	Body       string   `arg:"-b,--body"`
+	HTTPMethod string   `arg:"-m,--http-method,required" help:"HTTP method: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS"`
+	URL        string   `arg:"-u,--url,required" help:"Request URL"`
+	Body       string   `arg:"-b,--body" help:"Request body (raw text or JSON). Mutually exclusive with --data"`
+	Data       []string `arg:"-d,--data,separate" help:"Body field as key=value, repeatable; builds a JSON object. Mutually exclusive with --body"`
 	Header     []string `arg:"-H,--header,separate"`
 	Output     string   `arg:"-o"`
 }

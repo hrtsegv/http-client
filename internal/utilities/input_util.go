@@ -49,3 +49,25 @@ func ParseBody(bodyStr string) ([]byte, error) {
 
 	return []byte(bodyStr), nil
 }
+
+// ParseDataFields builds a JSON object body from repeated "key=value"
+// fields, e.g. from a -d/--data flag.
+func ParseDataFields(fields []string) ([]byte, error) {
+	data := make(map[string]string, len(fields))
+
+	for _, f := range fields {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+
+		key, value, ok := strings.Cut(f, "=")
+		if !ok {
+			return nil, fmt.Errorf("invalid data field: %s. Expected 'key=value'", f)
+		}
+
+		data[strings.TrimSpace(key)] = value
+	}
+
+	return json.Marshal(data)
+}

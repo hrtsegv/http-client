@@ -3,6 +3,7 @@ package httpmethods
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -18,7 +19,7 @@ type Result struct {
 }
 
 func exec(input Input) (*Result, error) {
-	reqBody, err := utilities.ParseBody(input.Body)
+	reqBody, err := resolveBody(input)
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +55,20 @@ func exec(input Input) (*Result, error) {
 	}
 
 	return &Result{Response: resp, Elapsed: elapsed}, nil
+}
+
+// resolveBody picks the request body from either --body or --data, which
+// are mutually exclusive.
+func resolveBody(input Input) ([]byte, error) {
+	if input.Body != "" && len(input.Data) > 0 {
+		return nil, fmt.Errorf("cannot use both --body and --data")
+	}
+
+	if len(input.Data) > 0 {
+		return utilities.ParseDataFields(input.Data)
+	}
+
+	return utilities.ParseBody(input.Body)
 }
 
 // normalizeURL defaults to https:// when the given URL has no scheme,
