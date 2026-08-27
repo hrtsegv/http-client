@@ -35,6 +35,7 @@ type Input struct {
 	Insecure   bool          `arg:"-k,--insecure" help:"Skip TLS certificate verification"`
 	NoRedirect bool          `arg:"--no-redirect" help:"Do not follow redirects"`
 	Auth       string        `arg:"-a,--auth" help:"Basic auth credentials as user:pass"`
+	Fail       bool          `arg:"-f,--fail" help:"Exit with a non-zero status code on HTTP error responses (status >= 400)"`
 }
 
 func RunHttpMethod(input Input) (*Result, error) {

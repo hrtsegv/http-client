@@ -27,7 +27,7 @@ func Run(input httpmethods.Input) int {
 
 	if strings.EqualFold(input.HTTPMethod, "head") {
 		output.PrintColoredHeaders(result.Response.Header)
-		return 0
+		return exitCode(input, result.Response.StatusCode)
 	}
 
 	body, err := io.ReadAll(result.Response.Body)
@@ -45,5 +45,14 @@ func Run(input httpmethods.Input) int {
 		}
 	}
 
+	return exitCode(input, result.Response.StatusCode)
+}
+
+// exitCode returns 1 when --fail is set and the response status is an
+// error (>= 400), and 0 otherwise.
+func exitCode(input httpmethods.Input, statusCode int) int {
+	if input.Fail && statusCode >= 400 {
+		return 1
+	}
 	return 0
 }
