@@ -5,11 +5,31 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/gookit/color"
 )
+
+// PrintStatusLine prints the response status and how long the request took,
+// colored green/yellow/red for 2xx/3xx/4xx+ responses.
+func PrintStatusLine(resp *http.Response, elapsed time.Duration) {
+	color.New(statusColor(resp.StatusCode)).Printf("%s %s", resp.Proto, resp.Status)
+	fmt.Printf("  (%s)\n", elapsed.Round(time.Millisecond))
+}
+
+func statusColor(statusCode int) color.Color {
+	switch {
+	case statusCode >= 400:
+		return color.FgRed
+	case statusCode >= 300:
+		return color.FgYellow
+	default:
+		return color.FgGreen
+	}
+}
 
 func PrintColoredHeaders(headers map[string][]string) {
 	for key, values := range headers {

@@ -6,11 +6,18 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aladdin-io/http-client/internal/utilities"
 )
 
-func exec(input Input) (*http.Response, error) {
+// Result holds an HTTP response together with how long the request took.
+type Result struct {
+	Response *http.Response
+	Elapsed  time.Duration
+}
+
+func exec(input Input) (*Result, error) {
 	reqBody, err := utilities.ParseBody(input.Body)
 	if err != nil {
 		return nil, err
@@ -39,12 +46,14 @@ func exec(input Input) (*http.Response, error) {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
+	start := time.Now()
 	resp, err := httpClient.Do(req)
+	elapsed := time.Since(start)
 	if err != nil {
 		return nil, err
 	}
 
-	return resp, err
+	return &Result{Response: resp, Elapsed: elapsed}, nil
 }
 
 // normalizeURL defaults to https:// when the given URL has no scheme,

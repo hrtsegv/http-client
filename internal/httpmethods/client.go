@@ -30,7 +30,7 @@ var httpClient *http.Client = &http.Client{
 	Timeout: 30 * time.Second,
 }
 
-func RunHttpMethod(input Input) (*http.Response, error) {
+func RunHttpMethod(input Input) (*Result, error) {
 
 	if ok := slices.Contains(AvailableHttpMethods, strings.ToUpper(input.HTTPMethod)); !ok {
 		return nil, fmt.Errorf("unknown http method: %v", input.HTTPMethod)
