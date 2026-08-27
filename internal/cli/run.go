@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gookit/color"
+
 	"github.com/aladdin-io/http-client/internal/httpmethods"
 	"github.com/aladdin-io/http-client/internal/output"
 )
@@ -16,6 +18,10 @@ import (
 // Run executes the HTTP request described by input, prints the response,
 // and returns the process exit code.
 func Run(input httpmethods.Input) int {
+	if input.NoColor || !color.IsTerminal(os.Stdout.Fd()) {
+		color.Disable()
+	}
+
 	result, err := httpmethods.RunHttpMethod(input)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)

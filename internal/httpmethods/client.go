@@ -37,6 +37,7 @@ type Input struct {
 	Auth       string        `arg:"-a,--auth" help:"Basic auth credentials as user:pass"`
 	Fail       bool          `arg:"-f,--fail" help:"Exit with a non-zero status code on HTTP error responses (status >= 400)"`
 	Verbose    bool          `arg:"-v,--verbose" help:"Print the outgoing request and response headers to stderr"`
+	NoColor    bool          `arg:"--no-color" help:"Disable colored output"`
 }
 
 func RunHttpMethod(input Input) (*Result, error) {
