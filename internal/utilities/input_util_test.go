@@ -2,6 +2,8 @@ package utilities
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -48,6 +50,23 @@ func TestParseBody(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseBodyFromFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "body.json")
+	want := `{"key1":"value1"}`
+	if err := os.WriteFile(path, []byte(want), 0o644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	got, err := ParseBody("@" + path)
+	if err != nil {
+		t.Fatalf("ParseBody() error = %v", err)
+	}
+	if string(got) != want {
+		t.Errorf("ParseBody() got = %s, want %s", got, want)
 	}
 }
 

@@ -3,6 +3,8 @@ package utilities
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 )
 
@@ -37,17 +39,22 @@ func ParseHeaders(headers []string) (map[string]string, error) {
 	return headerMap, nil
 }
 
-// ParseBody trims the input body string and returns it as raw bytes. The
-// body is forwarded to the request as-is, whether it's JSON, XML, plain
-// text, or anything else.
+// ParseBody resolves a body argument into raw bytes, forwarded to the
+// request as-is. bodyStr may be raw text/JSON, "@path" to read the body
+// from a file, or "-" to read it from stdin.
 func ParseBody(bodyStr string) ([]byte, error) {
 	bodyStr = strings.TrimSpace(bodyStr)
 
-	if len(bodyStr) == 0 {
+	switch {
+	case bodyStr == "":
 		return []byte{}, nil
+	case bodyStr == "-":
+		return io.ReadAll(os.Stdin)
+	case strings.HasPrefix(bodyStr, "@"):
+		return os.ReadFile(strings.TrimPrefix(bodyStr, "@"))
+	default:
+		return []byte(bodyStr), nil
 	}
-
-	return []byte(bodyStr), nil
 }
 
 // ParseDataFields builds a JSON object body from repeated "key=value"
