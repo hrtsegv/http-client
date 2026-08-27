@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/gookit/color"
 )
@@ -42,7 +43,14 @@ func printColoredJSON(data interface{}, indent int) {
 
 	switch v := data.(type) {
 	case map[string]interface{}:
-		for key, value := range v {
+		keys := make([]string, 0, len(v))
+		for key := range v {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+
+		for _, key := range keys {
+			value := v[key]
 			fmt.Print(indentStr)
 			keyColor.Printf("%s: ", key)
 			if m, ok := value.(map[string]interface{}); ok {
