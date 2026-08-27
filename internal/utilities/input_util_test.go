@@ -12,15 +12,21 @@ func TestParseBody(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "Simple JSON-like",
-			input:   "{key1:value1,key2:value2}",
-			want:    `{"key1":"value1","key2":"value2"}`,
+			name:    "Standard JSON",
+			input:   `{"key1":"value1"}`,
+			want:    `{"key1":"value1"}`,
 			wantErr: false,
 		},
 		{
-			name:    "Standard JSON (currently broken)",
-			input:   `{"key1":"value1"}`,
-			want:    `{"key1":"value1"}`,
+			name:    "Plain text body is passed through as-is",
+			input:   "not json, just text with a comma, right there",
+			want:    "not json, just text with a comma, right there",
+			wantErr: false,
+		},
+		{
+			name:    "Empty body",
+			input:   "",
+			want:    "",
 			wantErr: false,
 		},
 	}

@@ -37,7 +37,9 @@ func ParseHeaders(headers []string) (map[string]string, error) {
 	return headerMap, nil
 }
 
-// ParseBody parses the input body string into a byte slice.
+// ParseBody trims the input body string and returns it as raw bytes. The
+// body is forwarded to the request as-is, whether it's JSON, XML, plain
+// text, or anything else.
 func ParseBody(bodyStr string) ([]byte, error) {
 	bodyStr = strings.TrimSpace(bodyStr)
 
@@ -45,35 +47,5 @@ func ParseBody(bodyStr string) ([]byte, error) {
 		return []byte{}, nil
 	}
 
-	// If it's valid JSON, return it as is
-	if json.Valid([]byte(bodyStr)) {
-		return []byte(bodyStr), nil
-	}
-
-	// Fallback to simplified format: {key:value,key2:value2}
-	if strings.HasPrefix(bodyStr, "{") && strings.HasSuffix(bodyStr, "}") {
-		content := bodyStr[1 : len(bodyStr)-1]
-		keyValuePairs := strings.Split(content, ",")
-		data := make(map[string]interface{})
-
-		for _, kvPair := range keyValuePairs {
-			parts := strings.SplitN(kvPair, ":", 2)
-			if len(parts) != 2 {
-				return nil, fmt.Errorf("invalid body format")
-			}
-
-			key := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
-
-			// Try to remove surrounding quotes if present (poor man's unquote)
-			key = strings.Trim(key, "\"'")
-			value = strings.Trim(value, "\"'")
-
-			data[key] = value
-		}
-		return json.Marshal(data)
-	}
-
-	// If neither, just return as raw bytes
 	return []byte(bodyStr), nil
 }
