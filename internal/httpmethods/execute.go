@@ -47,6 +47,10 @@ func exec(input Input) (*Result, error) {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", "http-client/"+Version)
+	}
+
 	client := newHTTPClient(input)
 
 	start := time.Now()

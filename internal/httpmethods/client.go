@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// Version is the tool's version, injected at build time via
+// -ldflags "-X .../httpmethods.Version=...". Used for the default
+// User-Agent header and the --version flag.
+var Version = "dev"
+
 var AvailableHttpMethods = []string{
 	"GET",
 	"POST",
