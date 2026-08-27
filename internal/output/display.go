@@ -31,6 +31,29 @@ func statusColor(statusCode int) color.Color {
 	}
 }
 
+// PrintVerboseRequest prints the outgoing request line, headers, and body
+// (if any) to stderr.
+func PrintVerboseRequest(req *http.Request, body []byte) {
+	fmt.Fprintf(os.Stderr, "> %s %s\n", req.Method, req.URL.String())
+	for key, values := range req.Header {
+		for _, value := range values {
+			fmt.Fprintf(os.Stderr, "> %s: %s\n", key, value)
+		}
+	}
+	if len(body) > 0 {
+		fmt.Fprintf(os.Stderr, ">\n%s\n", body)
+	}
+}
+
+// PrintVerboseResponseHeaders prints the response headers to stderr.
+func PrintVerboseResponseHeaders(resp *http.Response) {
+	for key, values := range resp.Header {
+		for _, value := range values {
+			fmt.Fprintf(os.Stderr, "< %s: %s\n", key, value)
+		}
+	}
+}
+
 func PrintColoredHeaders(headers map[string][]string) {
 	for key, values := range headers {
 		for _, value := range values {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aladdin-io/http-client/internal/output"
 	"github.com/aladdin-io/http-client/internal/utilities"
 )
 
@@ -59,6 +60,10 @@ func exec(input Input) (*Result, error) {
 		req.SetBasicAuth(user, pass)
 	}
 
+	if input.Verbose {
+		output.PrintVerboseRequest(req, reqBody)
+	}
+
 	client := newHTTPClient(input)
 
 	start := time.Now()
@@ -66,6 +71,10 @@ func exec(input Input) (*Result, error) {
 	elapsed := time.Since(start)
 	if err != nil {
 		return nil, err
+	}
+
+	if input.Verbose {
+		output.PrintVerboseResponseHeaders(resp)
 	}
 
 	return &Result{Response: resp, Elapsed: elapsed}, nil
