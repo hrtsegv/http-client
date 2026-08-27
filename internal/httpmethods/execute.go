@@ -47,8 +47,10 @@ func exec(input Input) (*Result, error) {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
+	client := newHTTPClient(input)
+
 	start := time.Now()
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	elapsed := time.Since(start)
 	if err != nil {
 		return nil, err
