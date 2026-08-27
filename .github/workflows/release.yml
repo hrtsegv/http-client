@@ -33,7 +33,7 @@ jobs:
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           out="http-client-${GOOS}-${GOARCH}${ext}"
           version="${GITHUB_REF_NAME}"
-          go build -ldflags "-s -w -X github.com/aladdin-io/http-client/internal/httpmethods.Version=${version}" -o "dist/${out}" .
+          go build -ldflags "-s -w -X github.com/hrtsegv/http-client/internal/httpmethods.Version=${version}" -o "dist/${out}" .
 
       - uses: actions/upload-artifact@v4
         with:

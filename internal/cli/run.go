@@ -11,8 +11,8 @@ import (
 
 	"github.com/gookit/color"
 
-	"github.com/aladdin-io/http-client/internal/httpmethods"
-	"github.com/aladdin-io/http-client/internal/output"
+	"github.com/hrtsegv/http-client/internal/httpmethods"
+	"github.com/hrtsegv/http-client/internal/output"
 )
 
 // Run executes the HTTP request described by input, prints the response,

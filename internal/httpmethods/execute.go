@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aladdin-io/http-client/internal/output"
-	"github.com/aladdin-io/http-client/internal/utilities"
+	"github.com/hrtsegv/http-client/internal/output"
+	"github.com/hrtsegv/http-client/internal/utilities"
 )
 
 // Result holds an HTTP response together with how long the request took.

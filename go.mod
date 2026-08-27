@@ -1,4 +1,4 @@
-module github.com/aladdin-io/http-client
+module github.com/hrtsegv/http-client
 
 go 1.25
 

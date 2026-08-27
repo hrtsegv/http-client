@@ -5,8 +5,8 @@ import (
 
 	"github.com/alexflint/go-arg"
 
-	"github.com/aladdin-io/http-client/internal/cli"
-	"github.com/aladdin-io/http-client/internal/httpmethods"
+	"github.com/hrtsegv/http-client/internal/cli"
+	"github.com/hrtsegv/http-client/internal/httpmethods"
 )
 
 func main() {
