@@ -4,8 +4,11 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/gookit/color"
@@ -13,6 +16,10 @@ import (
 	"github.com/hrtsegv/http-client/internal/httpmethods"
 	"github.com/hrtsegv/http-client/internal/output"
 )
+
+// exitCanceled is the conventional shell exit code for a command stopped
+// by Ctrl+C (128 + SIGINT).
+const exitCanceled = 130
 
 // Run executes the HTTP request described by input, prints the response,
 // and returns the process exit code.
@@ -31,8 +38,17 @@ func Run(input httpmethods.Input) int {
 		}
 	}()
 
-	result, err := httpmethods.RunHttpMethod(input)
+	// Ctrl+C cancels the request in flight rather than leaving the process
+	// blocked until the timeout expires.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	result, err := httpmethods.RunHttpMethod(ctx, input)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			fmt.Fprintln(os.Stderr, "canceled")
+			return exitCanceled
+		}
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}

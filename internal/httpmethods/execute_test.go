@@ -1,6 +1,8 @@
 package httpmethods
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +33,7 @@ func TestExec_MethodHeaderBodyPassthrough(t *testing.T) {
 		Timeout:    5 * time.Second,
 	}
 
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
@@ -66,7 +68,7 @@ func TestExec_DefaultContentTypeAndUserAgent(t *testing.T) {
 		Timeout:    5 * time.Second,
 	}
 
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
@@ -89,7 +91,7 @@ func TestExec_NoBodyOmitsBody(t *testing.T) {
 	defer server.Close()
 
 	input := Input{HTTPMethod: "GET", URL: server.URL, Timeout: 5 * time.Second}
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
@@ -105,7 +107,7 @@ func TestExec_Auth(t *testing.T) {
 	defer server.Close()
 
 	input := Input{HTTPMethod: "GET", URL: server.URL, Auth: "alice:secret", Timeout: 5 * time.Second}
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
@@ -123,9 +125,35 @@ func TestExec_Timeout(t *testing.T) {
 	defer server.Close()
 
 	input := Input{HTTPMethod: "GET", URL: server.URL, Timeout: 10 * time.Millisecond}
-	_, err := RunHttpMethod(input)
+	_, err := RunHttpMethod(t.Context(), input)
 	if err == nil {
 		t.Fatal("RunHttpMethod() error = nil, want a timeout error")
+	}
+}
+
+func TestExec_ContextCancellationAbortsRequest(t *testing.T) {
+	released := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-released
+	}))
+	defer server.Close()
+	defer close(released)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	// A long timeout would keep this blocked; cancellation must win.
+	input := Input{HTTPMethod: "GET", URL: server.URL, Timeout: time.Minute}
+
+	_, err := RunHttpMethod(ctx, input)
+	if err == nil {
+		t.Fatal("RunHttpMethod() error = nil, want a cancellation error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("error = %v, want it to wrap context.Canceled", err)
 	}
 }
 
@@ -141,7 +169,7 @@ func TestExec_NoRedirect(t *testing.T) {
 	defer redirector.Close()
 
 	input := Input{HTTPMethod: "GET", URL: redirector.URL, NoRedirect: true, Timeout: 5 * time.Second}
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
@@ -160,12 +188,12 @@ func TestExec_Insecure(t *testing.T) {
 
 	// Without -k, the self-signed cert should be rejected.
 	input := Input{HTTPMethod: "GET", URL: server.URL, Timeout: 5 * time.Second}
-	if _, err := RunHttpMethod(input); err == nil {
+	if _, err := RunHttpMethod(t.Context(), input); err == nil {
 		t.Fatal("RunHttpMethod() error = nil, want a TLS verification error without --insecure")
 	}
 
 	input.Insecure = true
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() with --insecure error = %v", err)
 	}
@@ -190,7 +218,7 @@ func TestExec_QueryParameters(t *testing.T) {
 		Timeout:    5 * time.Second,
 	}
 
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
@@ -274,7 +302,7 @@ func TestExec_FormBody(t *testing.T) {
 		Timeout:    5 * time.Second,
 	}
 
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
@@ -336,7 +364,7 @@ func TestExec_MultipartUpload(t *testing.T) {
 		Timeout:    5 * time.Second,
 	}
 
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
@@ -367,7 +395,7 @@ func TestExec_MultipartMissingFileFailsBeforeSending(t *testing.T) {
 		Timeout:    5 * time.Second,
 	}
 
-	if _, err := RunHttpMethod(input); err == nil {
+	if _, err := RunHttpMethod(t.Context(), input); err == nil {
 		t.Fatal("RunHttpMethod() error = nil, want error for a missing upload file")
 	}
 	if reached {
@@ -384,7 +412,7 @@ func TestExec_PlainTextBodyGetsNoJSONContentType(t *testing.T) {
 
 	input := Input{HTTPMethod: "POST", URL: server.URL, Body: "just text", Timeout: 5 * time.Second}
 
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}
@@ -451,7 +479,7 @@ func TestExec_ProxyReceivesRequest(t *testing.T) {
 		Timeout:    5 * time.Second,
 	}
 
-	result, err := RunHttpMethod(input)
+	result, err := RunHttpMethod(t.Context(), input)
 	if err != nil {
 		t.Fatalf("RunHttpMethod() error = %v", err)
 	}

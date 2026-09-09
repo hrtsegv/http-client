@@ -2,6 +2,7 @@ package httpmethods
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +21,7 @@ type Result struct {
 	Elapsed  time.Duration
 }
 
-func exec(input Input) (*Result, error) {
+func exec(ctx context.Context, input Input) (*Result, error) {
 	body, err := resolveBody(input)
 	if err != nil {
 		return nil, err
@@ -40,7 +41,7 @@ func exec(input Input) (*Result, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest(strings.ToUpper(input.HTTPMethod), requestURL, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(input.HTTPMethod), requestURL, bodyReader)
 	if err != nil {
 		return nil, err
 	}

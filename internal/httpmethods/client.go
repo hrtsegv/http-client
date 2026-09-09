@@ -1,6 +1,7 @@
 package httpmethods
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
@@ -59,13 +60,13 @@ func (Input) Description() string {
 	return "http-client sends HTTP requests from the command line."
 }
 
-func RunHttpMethod(input Input) (*Result, error) {
+func RunHttpMethod(ctx context.Context, input Input) (*Result, error) {
 
 	if ok := slices.Contains(AvailableHttpMethods, strings.ToUpper(input.HTTPMethod)); !ok {
 		return nil, fmt.Errorf("unknown http method: %v", input.HTTPMethod)
 	}
 
-	return exec(input)
+	return exec(ctx, input)
 }
 
 // newHTTPClient builds an *http.Client configured from input's
