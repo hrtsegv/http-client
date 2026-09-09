@@ -41,6 +41,17 @@ func Run(input httpmethods.Input) int {
 		return exitCode(input, result.Response.StatusCode)
 	}
 
+	// With -o the body is streamed straight to disk and not printed, so a
+	// large download costs a fixed-size buffer rather than its full size
+	// in memory.
+	if input.Output != "" {
+		if _, err := output.StreamToFile(input.Output, result.Response.Body); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		return exitCode(input, result.Response.StatusCode)
+	}
+
 	body, err := io.ReadAll(result.Response.Body)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -48,13 +59,6 @@ func Run(input httpmethods.Input) int {
 	}
 
 	output.PrintColoredBody(body)
-
-	if input.Output != "" {
-		if err := output.WriteToFile(input.Output, body); err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			return 1
-		}
-	}
 
 	return exitCode(input, result.Response.StatusCode)
 }

@@ -112,16 +112,16 @@ func TestPrintStatusLine(t *testing.T) {
 	}
 }
 
-func TestWriteToFile_NoticeGoesToStderr(t *testing.T) {
+func TestStreamToFile_NoticeGoesToStderr(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "out.json")
 
 	var writeErr error
-	stdout, stderr := capture(t, func() { writeErr = WriteToFile(path, []byte("hello")) })
+	stdout, stderr := capture(t, func() { _, writeErr = StreamToFile(path, strings.NewReader("hello")) })
 	if writeErr != nil {
-		t.Fatalf("WriteToFile() error = %v", writeErr)
+		t.Fatalf("StreamToFile() error = %v", writeErr)
 	}
 
-	if !strings.Contains(stderr, "Saved to") {
+	if !strings.Contains(stderr, "Saved 5 B to") {
 		t.Errorf("missing save notice on stderr, got: %s", stderr)
 	}
 	if stdout != "" {
@@ -129,14 +129,20 @@ func TestWriteToFile_NoticeGoesToStderr(t *testing.T) {
 	}
 }
 
-func TestWriteToFile(t *testing.T) {
+func TestStreamToFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "out.json")
 
-	var writeErr error
-	capture(t, func() { writeErr = WriteToFile(path, []byte("hello")) })
+	var (
+		written  int64
+		writeErr error
+	)
+	capture(t, func() { written, writeErr = StreamToFile(path, strings.NewReader("hello")) })
 	if writeErr != nil {
-		t.Fatalf("WriteToFile() error = %v", writeErr)
+		t.Fatalf("StreamToFile() error = %v", writeErr)
+	}
+	if written != 5 {
+		t.Errorf("written = %d, want 5", written)
 	}
 
 	got, err := os.ReadFile(path)
@@ -148,21 +154,38 @@ func TestWriteToFile(t *testing.T) {
 	}
 
 	// Writing again should overwrite, not append.
-	capture(t, func() { writeErr = WriteToFile(path, []byte("world")) })
+	capture(t, func() { _, writeErr = StreamToFile(path, strings.NewReader("hi")) })
 	if writeErr != nil {
-		t.Fatalf("WriteToFile() (overwrite) error = %v", writeErr)
+		t.Fatalf("StreamToFile() (overwrite) error = %v", writeErr)
 	}
 	got, err = os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("os.ReadFile() error = %v", err)
 	}
-	if string(got) != "world" {
-		t.Errorf("file content after overwrite = %q, want %q", got, "world")
+	if string(got) != "hi" {
+		t.Errorf("file content after overwrite = %q, want %q", got, "hi")
 	}
 }
 
-func TestWriteToFile_EmptyFileName(t *testing.T) {
-	if err := WriteToFile("", []byte("hello")); err == nil {
-		t.Fatal("WriteToFile() error = nil, want error for empty file name")
+func TestStreamToFile_EmptyFileName(t *testing.T) {
+	if _, err := StreamToFile("", strings.NewReader("hello")); err == nil {
+		t.Fatal("StreamToFile() error = nil, want error for empty file name")
+	}
+}
+
+func TestHumanBytes(t *testing.T) {
+	tests := []struct {
+		in   int64
+		want string
+	}{
+		{512, "512 B"},
+		{1024, "1.0 KB"},
+		{10 * 1024 * 1024, "10.0 MB"},
+	}
+
+	for _, tt := range tests {
+		if got := humanBytes(tt.in); got != tt.want {
+			t.Errorf("humanBytes(%d) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }

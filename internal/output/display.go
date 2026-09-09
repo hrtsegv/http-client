@@ -157,18 +157,45 @@ func printColoredJSON(data interface{}, indent int) {
 	}
 }
 
-// WriteToFile writes the response body to fileName, replacing any existing
-// contents.
-func WriteToFile(fileName string, data []byte) error {
+// StreamToFile writes everything from r to fileName, replacing any
+// existing contents, and reports how many bytes were written. The copy is
+// chunked, so downloading a large file never requires holding it in
+// memory.
+func StreamToFile(fileName string, r io.Reader) (int64, error) {
 	if fileName == "" {
-		return errors.New("missing file name")
+		return 0, errors.New("missing file name")
 	}
 
-	if err := os.WriteFile(fileName, data, 0o644); err != nil {
-		return err
+	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return 0, err
 	}
 
-	fmt.Fprint(errOut, color.Green.Sprintf("Saved to %s\n", fileName))
+	written, err := io.Copy(file, r)
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return written, err
+	}
 
-	return nil
+	fmt.Fprint(errOut, color.Green.Sprintf("Saved %s to %s\n", humanBytes(written), fileName))
+
+	return written, nil
+}
+
+// humanBytes formats a byte count for the save notice.
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
