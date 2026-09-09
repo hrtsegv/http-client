@@ -74,6 +74,12 @@ func PrintResponseHead(resp *http.Response) {
 	fmt.Fprintln(out)
 }
 
+// PrintNotice prints a diagnostic line, such as a retry announcement, so
+// it can't be mistaken for part of the response body.
+func PrintNotice(format string, args ...any) {
+	fmt.Fprint(errOut, color.Yellow.Sprintf("! "+format+"\n", args...))
+}
+
 // PrintVerboseRequest prints the outgoing request line, headers, and body
 // (if any) as diagnostics.
 func PrintVerboseRequest(req *http.Request, body []byte) {

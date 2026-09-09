@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,18 +81,131 @@ func exec(ctx context.Context, input Input) (*Result, error) {
 		return nil, err
 	}
 
-	start := time.Now()
-	resp, err := client.Do(req)
-	elapsed := time.Since(start)
+	result, err := send(ctx, client, req, input)
 	if err != nil {
 		return nil, err
 	}
 
 	if input.Verbose {
-		output.PrintVerboseResponseHeaders(resp)
+		output.PrintVerboseResponseHeaders(result.Response)
 	}
 
-	return &Result{Response: resp, Elapsed: elapsed}, nil
+	return result, nil
+}
+
+// send performs the request, retrying transient failures when --retry asks
+// for it, and reports how long the successful attempt took.
+func send(ctx context.Context, client *http.Client, req *http.Request, input Input) (*Result, error) {
+	attempts := input.Retry + 1
+
+	// A streamed body (a multipart upload) is consumed by the first
+	// attempt and http.NewRequest can't rewind it, so it can't be retried.
+	// http.NoBody is non-nil but carries nothing, so it replays fine.
+	if attempts > 1 && req.Body != nil && req.Body != http.NoBody && req.GetBody == nil {
+		output.PrintNotice("request body is streamed and cannot be replayed, so --retry is ignored")
+		attempts = 1
+	}
+
+	for attempt := 1; ; attempt++ {
+		start := time.Now()
+		resp, err := client.Do(req)
+		elapsed := time.Since(start)
+
+		done := attempt >= attempts || (err == nil && !isTransient(resp.StatusCode))
+		if done {
+			if err != nil {
+				return nil, err
+			}
+			return &Result{Response: resp, Elapsed: elapsed}, nil
+		}
+
+		delay := retryDelay(input.RetryDelay, attempt, resp)
+		reason := describeAttempt(resp, err)
+		output.PrintNotice("%s, retrying in %s (attempt %d of %d)", reason, delay.Round(time.Millisecond), attempt+1, attempts)
+
+		if resp != nil {
+			// Drain before discarding so the connection can be reused.
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+		}
+
+		if err := waitFor(ctx, delay); err != nil {
+			return nil, err
+		}
+
+		if req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			req.Body = body
+		}
+	}
+}
+
+// isTransient reports whether a status is worth retrying: rate limiting or
+// a server-side failure.
+func isTransient(statusCode int) bool {
+	return statusCode == http.StatusTooManyRequests || statusCode >= http.StatusInternalServerError
+}
+
+func describeAttempt(resp *http.Response, err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return "got " + resp.Status
+}
+
+// retryDelay prefers the server's Retry-After and otherwise backs off
+// exponentially from the base delay, capping the growth so a large --retry
+// can't schedule an absurd wait.
+func retryDelay(base time.Duration, attempt int, resp *http.Response) time.Duration {
+	if resp != nil {
+		if after, ok := retryAfter(resp.Header.Get("Retry-After")); ok {
+			return after
+		}
+	}
+
+	return base << min(attempt-1, 6)
+}
+
+// retryAfter parses a Retry-After header, which is either a number of
+// seconds or an HTTP date.
+func retryAfter(value string) (time.Duration, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds < 0 {
+			return 0, false
+		}
+		return time.Duration(seconds) * time.Second, true
+	}
+
+	if date, err := http.ParseTime(value); err == nil {
+		if delay := time.Until(date); delay > 0 {
+			return delay, true
+		}
+		// A date already in the past means retry now.
+		return 0, true
+	}
+
+	return 0, false
+}
+
+// waitFor sleeps for delay, or returns early if the context is canceled.
+func waitFor(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // requestBody is the body to send plus the Content-Type it implies, which

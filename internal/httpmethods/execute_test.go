@@ -242,6 +242,177 @@ func TestBuildURL_InvalidQueryField(t *testing.T) {
 	}
 }
 
+func TestSend_RetriesTransientFailures(t *testing.T) {
+	tests := []struct {
+		name         string
+		failures     int
+		failStatus   int
+		retry        int
+		wantAttempts int
+		wantStatus   int
+	}{
+		{"recovers after two 503s", 2, http.StatusServiceUnavailable, 3, 3, http.StatusOK},
+		{"retries rate limiting", 1, http.StatusTooManyRequests, 2, 2, http.StatusOK},
+		{"no retry flag means one attempt", 1, http.StatusServiceUnavailable, 0, 1, http.StatusServiceUnavailable},
+		{"gives up and returns the last response", 5, http.StatusBadGateway, 2, 3, http.StatusBadGateway},
+		{"does not retry a 404", 1, http.StatusNotFound, 3, 1, http.StatusNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var attempts int
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				attempts++
+				if attempts <= tt.failures {
+					w.WriteHeader(tt.failStatus)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			input := Input{
+				HTTPMethod: "GET",
+				URL:        server.URL,
+				Retry:      tt.retry,
+				RetryDelay: time.Millisecond,
+				Timeout:    5 * time.Second,
+			}
+
+			result, err := RunHttpMethod(t.Context(), input)
+			if err != nil {
+				t.Fatalf("RunHttpMethod() error = %v", err)
+			}
+			_ = result.Response.Body.Close()
+
+			if attempts != tt.wantAttempts {
+				t.Errorf("attempts = %d, want %d", attempts, tt.wantAttempts)
+			}
+			if result.Response.StatusCode != tt.wantStatus {
+				t.Errorf("status = %d, want %d", result.Response.StatusCode, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func TestSend_RetriesReplayTheBody(t *testing.T) {
+	var bodies []string
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		received, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(received))
+		if attempts == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+	}))
+	defer server.Close()
+
+	input := Input{
+		HTTPMethod: "POST",
+		URL:        server.URL,
+		Body:       `{"key":"value"}`,
+		Retry:      1,
+		RetryDelay: time.Millisecond,
+		Timeout:    5 * time.Second,
+	}
+
+	result, err := RunHttpMethod(t.Context(), input)
+	if err != nil {
+		t.Fatalf("RunHttpMethod() error = %v", err)
+	}
+	_ = result.Response.Body.Close()
+
+	if len(bodies) != 2 {
+		t.Fatalf("attempts = %d, want 2", len(bodies))
+	}
+	if bodies[0] != bodies[1] {
+		t.Errorf("retry sent a different body: %q then %q", bodies[0], bodies[1])
+	}
+}
+
+func TestSend_StreamedBodyIsNotRetried(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "upload.txt")
+	if err := os.WriteFile(path, []byte("payload"), 0o644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	input := Input{
+		HTTPMethod: "POST",
+		URL:        server.URL,
+		Multipart:  []string{"upload=@" + path},
+		Retry:      3,
+		RetryDelay: time.Millisecond,
+		Timeout:    5 * time.Second,
+	}
+
+	result, err := RunHttpMethod(t.Context(), input)
+	if err != nil {
+		t.Fatalf("RunHttpMethod() error = %v", err)
+	}
+	_ = result.Response.Body.Close()
+
+	if attempts != 1 {
+		t.Errorf("attempts = %d, want 1: a streamed body cannot be replayed", attempts)
+	}
+}
+
+func TestRetryAfter(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  time.Duration
+		ok    bool
+	}{
+		{"seconds", "5", 5 * time.Second, true},
+		{"padded seconds", " 2 ", 2 * time.Second, true},
+		{"negative", "-1", 0, false},
+		{"empty", "", 0, false},
+		{"garbage", "soon", 0, false},
+		{"past date", "Mon, 02 Jan 2006 15:04:05 GMT", 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := retryAfter(tt.value)
+			if ok != tt.ok {
+				t.Fatalf("retryAfter(%q) ok = %v, want %v", tt.value, ok, tt.ok)
+			}
+			if ok && got != tt.want {
+				t.Errorf("retryAfter(%q) = %v, want %v", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRetryDelay(t *testing.T) {
+	base := 100 * time.Millisecond
+
+	if got := retryDelay(base, 1, nil); got != base {
+		t.Errorf("first retry delay = %v, want %v", got, base)
+	}
+	if got := retryDelay(base, 3, nil); got != 4*base {
+		t.Errorf("third retry delay = %v, want %v", got, 4*base)
+	}
+	// A huge attempt count must not shift the delay into nonsense.
+	if got := retryDelay(base, 40, nil); got != 64*base {
+		t.Errorf("capped delay = %v, want %v", got, 64*base)
+	}
+
+	resp := &http.Response{Header: http.Header{"Retry-After": {"3"}}}
+	if got := retryDelay(base, 5, resp); got != 3*time.Second {
+		t.Errorf("delay with Retry-After = %v, want 3s", got)
+	}
+}
+
 func TestNormalizeURL(t *testing.T) {
 	tests := []struct {
 		name string

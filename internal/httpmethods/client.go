@@ -37,6 +37,8 @@ type Input struct {
 	Header     []string      `arg:"-H,--header,separate"`
 	Output     string        `arg:"-o"`
 	Timeout    time.Duration `arg:"--timeout" default:"30s" help:"Request timeout"`
+	Retry      int           `arg:"--retry" help:"Retry transient failures (network errors, 429, and 5xx) up to this many times"`
+	RetryDelay time.Duration `arg:"--retry-delay" default:"500ms" help:"Base delay before a retry; doubles each attempt, and the server's Retry-After wins when present"`
 	Insecure   bool          `arg:"-k,--insecure" help:"Skip TLS certificate verification"`
 	Proxy      string        `arg:"--proxy" help:"Send the request through this proxy, e.g. http://127.0.0.1:8080 (overrides HTTP_PROXY/HTTPS_PROXY)"`
 	NoRedirect bool          `arg:"--no-redirect" help:"Do not follow redirects"`
