@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -84,6 +85,23 @@ func ParseKeyValuePairs(fields []string, flagName string) ([]KeyValue, error) {
 	}
 
 	return pairs, nil
+}
+
+// ParseFormFields builds an application/x-www-form-urlencoded body from
+// repeated "key=value" fields. A repeated key adds another value, as HTML
+// forms do for checkboxes and multi-selects.
+func ParseFormFields(fields []string) ([]byte, error) {
+	pairs, err := ParseKeyValuePairs(fields, "--form")
+	if err != nil {
+		return nil, err
+	}
+
+	values := url.Values{}
+	for _, pair := range pairs {
+		values.Add(pair.Key, pair.Value)
+	}
+
+	return []byte(values.Encode()), nil
 }
 
 // ParseDataFields builds a JSON object body from repeated "key=value"

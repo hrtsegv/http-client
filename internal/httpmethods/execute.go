@@ -21,10 +21,11 @@ type Result struct {
 }
 
 func exec(input Input) (*Result, error) {
-	reqBody, err := resolveBody(input)
+	body, err := resolveBody(input)
 	if err != nil {
 		return nil, err
 	}
+	reqBody := body.data
 
 	var bodyReader io.Reader = http.NoBody
 	if len(reqBody) > 0 {
@@ -50,8 +51,8 @@ func exec(input Input) (*Result, error) {
 		req.Header.Set(k, v)
 	}
 
-	if len(reqBody) > 0 && req.Header.Get("Content-Type") == "" && json.Valid(reqBody) {
-		req.Header.Set("Content-Type", "application/json")
+	if body.contentType != "" && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", body.contentType)
 	}
 
 	if req.Header.Get("User-Agent") == "" {
@@ -86,18 +87,57 @@ func exec(input Input) (*Result, error) {
 	return &Result{Response: resp, Elapsed: elapsed}, nil
 }
 
-// resolveBody picks the request body from either --body or --data, which
-// are mutually exclusive.
-func resolveBody(input Input) ([]byte, error) {
-	if input.Body != "" && len(input.Data) > 0 {
-		return nil, fmt.Errorf("cannot use both --body and --data")
-	}
+// requestBody is the body to send plus the Content-Type it implies, which
+// is applied only when the caller didn't set one with -H.
+type requestBody struct {
+	data        []byte
+	contentType string
+}
 
+// resolveBody picks the request body from whichever body flag was given.
+// They are mutually exclusive, since each implies a different encoding.
+func resolveBody(input Input) (requestBody, error) {
+	given := make([]string, 0, 3)
+	if input.Body != "" {
+		given = append(given, "--body")
+	}
 	if len(input.Data) > 0 {
-		return utilities.ParseDataFields(input.Data)
+		given = append(given, "--data")
+	}
+	if len(input.Form) > 0 {
+		given = append(given, "--form")
+	}
+	if len(given) > 1 {
+		return requestBody{}, fmt.Errorf("use only one of %s", strings.Join(given, ", "))
 	}
 
-	return utilities.ParseBody(input.Body)
+	switch {
+	case len(input.Data) > 0:
+		data, err := utilities.ParseDataFields(input.Data)
+		if err != nil {
+			return requestBody{}, err
+		}
+		return requestBody{data: data, contentType: "application/json"}, nil
+
+	case len(input.Form) > 0:
+		data, err := utilities.ParseFormFields(input.Form)
+		if err != nil {
+			return requestBody{}, err
+		}
+		return requestBody{data: data, contentType: "application/x-www-form-urlencoded"}, nil
+
+	default:
+		data, err := utilities.ParseBody(input.Body)
+		if err != nil {
+			return requestBody{}, err
+		}
+		// A raw body only implies JSON when it actually parses as JSON.
+		contentType := ""
+		if len(data) > 0 && json.Valid(data) {
+			contentType = "application/json"
+		}
+		return requestBody{data: data, contentType: contentType}, nil
+	}
 }
 
 // buildURL normalizes the URL and merges any --query parameters into it,

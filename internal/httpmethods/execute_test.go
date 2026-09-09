@@ -233,9 +233,79 @@ func TestNormalizeURL(t *testing.T) {
 }
 
 func TestResolveBody_MutuallyExclusive(t *testing.T) {
-	input := Input{HTTPMethod: "POST", URL: "http://example.com", Body: "raw", Data: []string{"key=value"}}
-	if _, err := resolveBody(input); err == nil {
-		t.Fatal("resolveBody() error = nil, want error for mutually exclusive --body/--data")
+	tests := []struct {
+		name  string
+		input Input
+	}{
+		{"body and data", Input{Body: "raw", Data: []string{"key=value"}}},
+		{"body and form", Input{Body: "raw", Form: []string{"key=value"}}},
+		{"data and form", Input{Data: []string{"a=1"}, Form: []string{"b=2"}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := resolveBody(tt.input); err == nil {
+				t.Error("resolveBody() error = nil, want error for conflicting body flags")
+			}
+		})
+	}
+}
+
+func TestExec_FormBody(t *testing.T) {
+	var (
+		gotContentType string
+		gotForm        url.Values
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("ParseForm() error = %v", err)
+		}
+		gotForm = r.PostForm
+	}))
+	defer server.Close()
+
+	input := Input{
+		HTTPMethod: "POST",
+		URL:        server.URL,
+		Form:       []string{"name=ada lovelace", "lang=go", "lang=rust"},
+		Timeout:    5 * time.Second,
+	}
+
+	result, err := RunHttpMethod(input)
+	if err != nil {
+		t.Fatalf("RunHttpMethod() error = %v", err)
+	}
+	_ = result.Response.Body.Close()
+
+	if gotContentType != "application/x-www-form-urlencoded" {
+		t.Errorf("Content-Type = %q, want application/x-www-form-urlencoded", gotContentType)
+	}
+	if got := gotForm.Get("name"); got != "ada lovelace" {
+		t.Errorf("name = %q, want %q", got, "ada lovelace")
+	}
+	if got := gotForm["lang"]; len(got) != 2 {
+		t.Errorf("lang = %v, want two values", got)
+	}
+}
+
+func TestExec_PlainTextBodyGetsNoJSONContentType(t *testing.T) {
+	var gotContentType string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+	}))
+	defer server.Close()
+
+	input := Input{HTTPMethod: "POST", URL: server.URL, Body: "just text", Timeout: 5 * time.Second}
+
+	result, err := RunHttpMethod(input)
+	if err != nil {
+		t.Fatalf("RunHttpMethod() error = %v", err)
+	}
+	_ = result.Response.Body.Close()
+
+	if gotContentType != "" {
+		t.Errorf("Content-Type = %q, want it unset for a non-JSON body", gotContentType)
 	}
 }
 

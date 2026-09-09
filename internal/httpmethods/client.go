@@ -27,8 +27,9 @@ var AvailableHttpMethods = []string{
 type Input struct {
 	HTTPMethod string        `arg:"-m,--http-method,required" help:"HTTP method: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS"`
 	URL        string        `arg:"-u,--url,required" help:"Request URL"`
-	Body       string        `arg:"-b,--body" help:"Request body: raw text/JSON, @path to read from a file, or - to read from stdin. Mutually exclusive with --data"`
-	Data       []string      `arg:"-d,--data,separate" help:"Body field as key=value, repeatable; builds a JSON object. Mutually exclusive with --body"`
+	Body       string        `arg:"-b,--body" help:"Request body: raw text/JSON, @path to read from a file, or - to read from stdin"`
+	Data       []string      `arg:"-d,--data,separate" help:"Body field as key=value, repeatable; builds a JSON object"`
+	Form       []string      `arg:"--form,separate" help:"Body field as key=value, repeatable; sends application/x-www-form-urlencoded"`
 	Query      []string      `arg:"--query,separate" help:"Query parameter as key=value, repeatable; merged into the URL and encoded"`
 	Header     []string      `arg:"-H,--header,separate"`
 	Output     string        `arg:"-o"`
