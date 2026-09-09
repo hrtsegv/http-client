@@ -131,6 +131,26 @@ func TestStreamToFile_NoticeGoesToStderr(t *testing.T) {
 	}
 }
 
+func TestPrintColoredHeaders_SortedNames(t *testing.T) {
+	headers := map[string][]string{
+		"Zebra":        {"z"},
+		"Content-Type": {"application/json"},
+		"Age":          {"1"},
+	}
+
+	out, _ := capture(t, func() {
+		PrintColoredHeaders(headers)
+	})
+
+	iAge := strings.Index(out, "Age")
+	iContentType := strings.Index(out, "Content-Type")
+	iZebra := strings.Index(out, "Zebra")
+
+	if iAge >= iContentType || iContentType >= iZebra {
+		t.Errorf("headers not printed in sorted order, got: %s", out)
+	}
+}
+
 // response builds a minimal *http.Response around a body for PrintBody.
 func response(contentType, body string) *http.Response {
 	header := http.Header{}

@@ -69,9 +69,9 @@ func statusColor(statusCode int) color.Color {
 // (if any) as diagnostics.
 func PrintVerboseRequest(req *http.Request, body []byte) {
 	fmt.Fprintf(errOut, "> %s %s\n", req.Method, req.URL.String())
-	for key, values := range req.Header {
-		for _, value := range values {
-			fmt.Fprintf(errOut, "> %s: %s\n", key, value)
+	for _, name := range sortedHeaderNames(req.Header) {
+		for _, value := range req.Header[name] {
+			fmt.Fprintf(errOut, "> %s: %s\n", name, value)
 		}
 	}
 	if len(body) > 0 {
@@ -81,20 +81,32 @@ func PrintVerboseRequest(req *http.Request, body []byte) {
 
 // PrintVerboseResponseHeaders prints the response headers as diagnostics.
 func PrintVerboseResponseHeaders(resp *http.Response) {
-	for key, values := range resp.Header {
-		for _, value := range values {
-			fmt.Fprintf(errOut, "< %s: %s\n", key, value)
+	for _, name := range sortedHeaderNames(resp.Header) {
+		for _, value := range resp.Header[name] {
+			fmt.Fprintf(errOut, "< %s: %s\n", name, value)
 		}
 	}
 }
 
 // PrintColoredHeaders prints response headers as the command's output.
 func PrintColoredHeaders(headers map[string][]string) {
-	for key, values := range headers {
-		for _, value := range values {
-			fmt.Fprintf(out, "%s%s\n", color.Bold.Sprintf("%s: ", key), color.Cyan.Sprint(value))
+	for _, name := range sortedHeaderNames(headers) {
+		for _, value := range headers[name] {
+			fmt.Fprintf(out, "%s%s\n", color.Bold.Sprintf("%s: ", name), color.Cyan.Sprint(value))
 		}
 	}
+}
+
+// sortedHeaderNames returns header names in a stable order: Go randomizes
+// map iteration, so headers would otherwise shuffle on every run.
+func sortedHeaderNames(headers map[string][]string) []string {
+	names := make([]string, 0, len(headers))
+	for name := range headers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	return names
 }
 
 // sniffLen is how much of the body is inspected to tell text from binary.
