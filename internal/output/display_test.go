@@ -61,15 +61,36 @@ func TestPrintColoredBody_NonJSONIsPassedThrough(t *testing.T) {
 func TestPrintStatusLine(t *testing.T) {
 	resp := &http.Response{Proto: "HTTP/1.1", Status: "200 OK", StatusCode: 200}
 
-	out, _ := capture(t, func() {
+	stdout, stderr := capture(t, func() {
 		PrintStatusLine(resp, 42*time.Millisecond)
 	})
 
-	if !strings.Contains(out, "HTTP/1.1 200 OK") {
-		t.Errorf("missing status line, got: %s", out)
+	if !strings.Contains(stderr, "HTTP/1.1 200 OK") {
+		t.Errorf("missing status line, got: %s", stderr)
 	}
-	if !strings.Contains(out, "42ms") {
-		t.Errorf("missing elapsed time, got: %s", out)
+	if !strings.Contains(stderr, "42ms") {
+		t.Errorf("missing elapsed time, got: %s", stderr)
+	}
+	// stdout must stay clean so the body can be piped into other tools.
+	if stdout != "" {
+		t.Errorf("status line leaked to stdout: %q", stdout)
+	}
+}
+
+func TestWriteToFile_NoticeGoesToStderr(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "out.json")
+
+	var writeErr error
+	stdout, stderr := capture(t, func() { writeErr = WriteToFile(path, []byte("hello")) })
+	if writeErr != nil {
+		t.Fatalf("WriteToFile() error = %v", writeErr)
+	}
+
+	if !strings.Contains(stderr, "Saved to") {
+		t.Errorf("missing save notice on stderr, got: %s", stderr)
+	}
+	if stdout != "" {
+		t.Errorf("save notice leaked to stdout: %q", stdout)
 	}
 }
 

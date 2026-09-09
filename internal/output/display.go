@@ -42,10 +42,12 @@ func Flush() error {
 }
 
 // PrintStatusLine prints the response status and how long the request took,
-// colored green/yellow/red for 2xx/3xx/4xx+ responses.
+// colored green/yellow/red for 2xx/3xx/4xx+ responses. It goes to the
+// diagnostic stream so that stdout carries only the response body and
+// stays pipeable into jq and friends.
 func PrintStatusLine(resp *http.Response, elapsed time.Duration) {
 	status := color.New(statusColor(resp.StatusCode)).Sprintf("%s %s", resp.Proto, resp.Status)
-	fmt.Fprintf(out, "%s  (%s)\n", status, elapsed.Round(time.Millisecond))
+	fmt.Fprintf(errOut, "%s  (%s)\n", status, elapsed.Round(time.Millisecond))
 }
 
 func statusColor(statusCode int) color.Color {
@@ -162,7 +164,7 @@ func WriteToFile(fileName string, data []byte) error {
 		return err
 	}
 
-	fmt.Fprint(out, color.Green.Sprintf("Saved to %s\n", fileName))
+	fmt.Fprint(errOut, color.Green.Sprintf("Saved to %s\n", fileName))
 
 	return nil
 }
