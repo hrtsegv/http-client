@@ -92,6 +92,32 @@ func TestRun_OutputFileStreamsBodyAndSkipsPrinting(t *testing.T) {
 	}
 }
 
+func TestRun_IncludePrintsHeadersBeforeBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Marker", "here")
+		_, _ = w.Write([]byte("the body"))
+	}))
+	defer server.Close()
+
+	_, stdout, _ := run(t, httpmethods.Input{
+		HTTPMethod: "GET",
+		URL:        server.URL,
+		Include:    true,
+		Timeout:    5 * time.Second,
+	})
+
+	iStatus := strings.Index(stdout, "200 OK")
+	iHeader := strings.Index(stdout, "X-Marker")
+	iBody := strings.Index(stdout, "the body")
+
+	if iStatus < 0 || iHeader < 0 || iBody < 0 {
+		t.Fatalf("missing status, header, or body in output: %q", stdout)
+	}
+	if iStatus >= iHeader || iHeader >= iBody {
+		t.Errorf("status/headers/body out of order: %q", stdout)
+	}
+}
+
 func TestRun_FailFlagExitCode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

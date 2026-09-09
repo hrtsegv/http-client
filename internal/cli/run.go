@@ -45,6 +45,10 @@ func Run(input httpmethods.Input) int {
 		return exitCode(input, result.Response.StatusCode)
 	}
 
+	if input.Include {
+		output.PrintResponseHead(result.Response)
+	}
+
 	// With -o the body is streamed straight to disk and not printed, so a
 	// large download costs a fixed-size buffer rather than its full size
 	// in memory.

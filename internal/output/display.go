@@ -65,6 +65,15 @@ func statusColor(statusCode int) color.Color {
 	}
 }
 
+// PrintResponseHead prints the status line and response headers as part of
+// the command's output, ahead of the body, for -i/--include.
+func PrintResponseHead(resp *http.Response) {
+	status := color.New(statusColor(resp.StatusCode)).Sprintf("%s %s", resp.Proto, resp.Status)
+	fmt.Fprintln(out, status)
+	PrintColoredHeaders(resp.Header)
+	fmt.Fprintln(out)
+}
+
 // PrintVerboseRequest prints the outgoing request line, headers, and body
 // (if any) as diagnostics.
 func PrintVerboseRequest(req *http.Request, body []byte) {

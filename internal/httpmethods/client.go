@@ -37,6 +37,7 @@ type Input struct {
 	Auth       string        `arg:"-a,--auth" help:"Basic auth credentials as user:pass"`
 	Fail       bool          `arg:"-f,--fail" help:"Exit with a non-zero status code on HTTP error responses (status >= 400)"`
 	Verbose    bool          `arg:"-v,--verbose" help:"Print the outgoing request and response headers to stderr"`
+	Include    bool          `arg:"-i,--include" help:"Include the response status line and headers in the output, before the body"`
 	NoColor    bool          `arg:"--no-color" help:"Disable colored output"`
 	Raw        bool          `arg:"--raw" help:"Write the response body verbatim: no JSON formatting and no binary-output guard (implied when stdout is not a terminal)"`
 }
