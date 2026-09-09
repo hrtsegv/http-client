@@ -2,10 +2,157 @@ package utilities
 
 import (
 	"encoding/json"
+	"io"
+	"mime"
+	"mime/multipart"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestParseKeyValuePairs(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   []string
+		want    []KeyValue
+		wantErr bool
+	}{
+		{
+			name:  "keeps the given order",
+			input: []string{"b=2", "a=1"},
+			want:  []KeyValue{{Key: "b", Value: "2"}, {Key: "a", Value: "1"}},
+		},
+		{
+			name:  "keeps later equals signs in the value",
+			input: []string{"filter=a=b=c"},
+			want:  []KeyValue{{Key: "filter", Value: "a=b=c"}},
+		},
+		{
+			name:  "allows an empty value",
+			input: []string{"empty="},
+			want:  []KeyValue{{Key: "empty", Value: ""}},
+		},
+		{
+			name:  "skips blank arguments",
+			input: []string{"", "   ", "a=1"},
+			want:  []KeyValue{{Key: "a", Value: "1"}},
+		},
+		{
+			name:    "rejects a missing equals sign",
+			input:   []string{"nope"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseKeyValuePairs(tt.input, "--test")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseKeyValuePairs() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d pairs, want %d: %v", len(got), len(tt.want), got)
+			}
+			for i, want := range tt.want {
+				if got[i] != want {
+					t.Errorf("pair %d = %+v, want %+v", i, got[i], want)
+				}
+			}
+		})
+	}
+}
+
+func TestParseKeyValuePairs_ErrorNamesTheFlag(t *testing.T) {
+	_, err := ParseKeyValuePairs([]string{"nope"}, "--query")
+	if err == nil {
+		t.Fatal("ParseKeyValuePairs() error = nil, want an error")
+	}
+	if !strings.Contains(err.Error(), "--query") {
+		t.Errorf("error %q should name the offending flag", err)
+	}
+}
+
+func TestParseFormFields(t *testing.T) {
+	encoded, err := ParseFormFields([]string{"name=ada lovelace", "lang=go", "lang=rust"})
+	if err != nil {
+		t.Fatalf("ParseFormFields() error = %v", err)
+	}
+
+	values, err := url.ParseQuery(string(encoded))
+	if err != nil {
+		t.Fatalf("ParseQuery() error = %v: %s", err, encoded)
+	}
+
+	if got := values.Get("name"); got != "ada lovelace" {
+		t.Errorf("name = %q, want %q", got, "ada lovelace")
+	}
+	if got := values["lang"]; len(got) != 2 {
+		t.Errorf("lang = %v, want both values kept", got)
+	}
+}
+
+func TestMultipartBody(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "note.txt")
+	if err := os.WriteFile(path, []byte("file content"), 0o644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	body, contentType, err := MultipartBody([]string{"field=value", "upload=@" + path})
+	if err != nil {
+		t.Fatalf("MultipartBody() error = %v", err)
+	}
+
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("ParseMediaType(%q) error = %v", contentType, err)
+	}
+
+	reader := multipart.NewReader(body, params["boundary"])
+	form, err := reader.ReadForm(1 << 20)
+	if err != nil {
+		t.Fatalf("ReadForm() error = %v", err)
+	}
+	defer func() { _ = form.RemoveAll() }()
+
+	if got := form.Value["field"]; len(got) != 1 || got[0] != "value" {
+		t.Errorf("field = %v, want [value]", got)
+	}
+
+	files := form.File["upload"]
+	if len(files) != 1 {
+		t.Fatalf("upload files = %d, want 1", len(files))
+	}
+	if files[0].Filename != "note.txt" {
+		t.Errorf("filename = %q, want note.txt", files[0].Filename)
+	}
+
+	opened, err := files[0].Open()
+	if err != nil {
+		t.Fatalf("opening uploaded file: %v", err)
+	}
+	defer func() { _ = opened.Close() }()
+
+	content, err := io.ReadAll(opened)
+	if err != nil {
+		t.Fatalf("reading uploaded file: %v", err)
+	}
+	if string(content) != "file content" {
+		t.Errorf("content = %q, want %q", content, "file content")
+	}
+}
+
+func TestMultipartBody_MissingFile(t *testing.T) {
+	_, _, err := MultipartBody([]string{"upload=@" + filepath.Join(t.TempDir(), "absent")})
+	if err == nil {
+		t.Fatal("MultipartBody() error = nil, want an error for a missing file")
+	}
+}
 
 func TestParseBody(t *testing.T) {
 	tests := []struct {
