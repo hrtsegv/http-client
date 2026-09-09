@@ -2,12 +2,14 @@ package output
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gookit/color"
 )
@@ -126,6 +128,143 @@ func TestStreamToFile_NoticeGoesToStderr(t *testing.T) {
 	}
 	if stdout != "" {
 		t.Errorf("save notice leaked to stdout: %q", stdout)
+	}
+}
+
+// response builds a minimal *http.Response around a body for PrintBody.
+func response(contentType, body string) *http.Response {
+	header := http.Header{}
+	if contentType != "" {
+		header.Set("Content-Type", contentType)
+	}
+
+	return &http.Response{
+		Header:        header,
+		Body:          io.NopCloser(strings.NewReader(body)),
+		ContentLength: int64(len(body)),
+	}
+}
+
+func TestPrintBody(t *testing.T) {
+	png := "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR binary payload"
+
+	tests := []struct {
+		name          string
+		contentType   string
+		body          string
+		raw           bool
+		wantStdout    string
+		wantStderrHas string
+	}{
+		{
+			name:        "raw passes JSON through untouched",
+			contentType: "application/json",
+			body:        `{"b":2,"a":1}`,
+			raw:         true,
+			wantStdout:  `{"b":2,"a":1}`,
+		},
+		{
+			name:        "raw prints binary without complaint",
+			contentType: "image/png",
+			body:        png,
+			raw:         true,
+			wantStdout:  png,
+		},
+		{
+			name:          "binary body is replaced with a notice",
+			contentType:   "image/png",
+			body:          png,
+			wantStdout:    "",
+			wantStderrHas: "binary response body",
+		},
+		{
+			name:        "utf-8 text is printed even with an unknown type",
+			contentType: "application/vnd.acme.thing",
+			body:        "héllo wörld",
+			wantStdout:  "héllo wörld",
+		},
+		{
+			name:        "declared text type is trusted",
+			contentType: "text/csv",
+			body:        "a,b\n1,2",
+			wantStdout:  "a,b\n1,2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			stdout, stderr := capture(t, func() {
+				err = PrintBody(response(tt.contentType, tt.body), tt.raw)
+			})
+			if err != nil {
+				t.Fatalf("PrintBody() error = %v", err)
+			}
+
+			if strings.TrimRight(stdout, "\n") != tt.wantStdout {
+				t.Errorf("stdout = %q, want %q", stdout, tt.wantStdout)
+			}
+			if tt.wantStderrHas != "" && !strings.Contains(stderr, tt.wantStderrHas) {
+				t.Errorf("stderr = %q, want it to contain %q", stderr, tt.wantStderrHas)
+			}
+		})
+	}
+}
+
+func TestPrintBody_PrettyPrintsJSON(t *testing.T) {
+	stdout, _ := capture(t, func() {
+		if err := PrintBody(response("application/json", `{"b":2,"a":1}`), false); err != nil {
+			t.Fatalf("PrintBody() error = %v", err)
+		}
+	})
+
+	if !strings.Contains(stdout, "a: 1") || !strings.Contains(stdout, "b: 2") {
+		t.Errorf("body not pretty-printed, got: %q", stdout)
+	}
+}
+
+func TestIsBinary(t *testing.T) {
+	tests := []struct {
+		name        string
+		prefix      string
+		contentType string
+		want        bool
+	}{
+		{"empty body", "", "", false},
+		{"nul byte", "abc\x00def", "text/plain", true},
+		{"plain text", "hello", "text/plain", false},
+		{"json without a type", `{"a":1}`, "", false},
+		{"invalid utf-8, unknown type", "\xff\xfe\xfa\xfb", "", true},
+		{"gzip type", "\x1f\x8b\x08 compressed", "application/gzip", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isBinary([]byte(tt.prefix), tt.contentType); got != tt.want {
+				t.Errorf("isBinary(%q, %q) = %v, want %v", tt.prefix, tt.contentType, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTrimPartialRune(t *testing.T) {
+	// A 512-byte sniff window can cut a multi-byte rune in half; the
+	// truncated tail must not make valid UTF-8 look binary.
+	full := []byte("hello é")
+	truncated := full[:len(full)-1]
+
+	if utf8.Valid(truncated) {
+		t.Fatal("test setup: expected the truncated slice to be invalid UTF-8")
+	}
+	if !utf8.Valid(trimPartialRune(truncated)) {
+		t.Errorf("trimPartialRune(%q) still invalid UTF-8", truncated)
+	}
+
+	// Genuinely invalid bytes must survive the trim so they still read as
+	// binary.
+	invalid := []byte("\xff\xfe\xfa\xfb")
+	if utf8.Valid(trimPartialRune(invalid)) {
+		t.Errorf("trimPartialRune(%q) trimmed away invalid bytes", invalid)
 	}
 }
 

@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gookit/color"
 )
@@ -93,6 +95,122 @@ func PrintColoredHeaders(headers map[string][]string) {
 			fmt.Fprintf(out, "%s%s\n", color.Bold.Sprintf("%s: ", key), color.Cyan.Sprint(value))
 		}
 	}
+}
+
+// sniffLen is how much of the body is inspected to tell text from binary.
+const sniffLen = 512
+
+// PrintBody writes the response body to the output stream.
+//
+// When raw is set the body is copied through byte for byte. Otherwise a
+// JSON body is pretty-printed, and a body that looks binary is replaced
+// with a short notice on the diagnostic stream so it can't scramble the
+// terminal.
+func PrintBody(resp *http.Response, raw bool) error {
+	if raw {
+		_, err := io.Copy(out, resp.Body)
+		return err
+	}
+
+	body := bufio.NewReaderSize(resp.Body, sniffLen)
+
+	prefix, err := body.Peek(sniffLen)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, bufio.ErrBufferFull) {
+		return err
+	}
+
+	if isBinary(prefix, resp.Header.Get("Content-Type")) {
+		return printBinaryNotice(resp, body)
+	}
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return err
+	}
+
+	PrintColoredBody(data)
+
+	return nil
+}
+
+// printBinaryNotice reports a body that shouldn't be written to a terminal,
+// preferring the declared length over draining the body to measure it.
+func printBinaryNotice(resp *http.Response, body io.Reader) error {
+	size := resp.ContentLength
+	if size < 0 {
+		n, err := io.Copy(io.Discard, body)
+		if err != nil {
+			return err
+		}
+		size = n
+	}
+
+	description := humanBytes(size)
+	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
+		description += ", " + contentType
+	}
+
+	fmt.Fprint(errOut, color.Yellow.Sprintf(
+		"binary response body (%s) not shown — use -o FILE to save it, or --raw to print it\n",
+		description,
+	))
+
+	return nil
+}
+
+// isBinary reports whether a body should be kept away from the terminal:
+// it contains a NUL byte, or its media type isn't textual and the bytes
+// aren't valid UTF-8.
+func isBinary(prefix []byte, contentType string) bool {
+	if len(prefix) == 0 {
+		return false
+	}
+
+	if bytes.IndexByte(prefix, 0) >= 0 {
+		return true
+	}
+
+	mediaType := contentType
+	if parsed, _, err := mime.ParseMediaType(contentType); err == nil {
+		mediaType = parsed
+	}
+	if isTextualMediaType(mediaType) {
+		return false
+	}
+
+	return !utf8.Valid(trimPartialRune(prefix))
+}
+
+func isTextualMediaType(mediaType string) bool {
+	switch {
+	case strings.HasPrefix(mediaType, "text/"),
+		strings.HasSuffix(mediaType, "/json"), strings.HasSuffix(mediaType, "+json"),
+		strings.HasSuffix(mediaType, "/xml"), strings.HasSuffix(mediaType, "+xml"),
+		mediaType == "application/javascript",
+		mediaType == "application/x-www-form-urlencoded":
+		return true
+	default:
+		return false
+	}
+}
+
+// trimPartialRune drops a trailing multi-byte rune that the sniff window
+// cut in half, so a truncated prefix isn't mistaken for invalid UTF-8.
+// Bytes that are simply invalid are left alone — those really do mean the
+// body isn't text.
+func trimPartialRune(prefix []byte) []byte {
+	// Walk back over the final rune's continuation bytes to its start.
+	for i := len(prefix) - 1; i >= 0 && i > len(prefix)-utf8.UTFMax; i-- {
+		if !utf8.RuneStart(prefix[i]) {
+			continue
+		}
+		if utf8.FullRune(prefix[i:]) {
+			return prefix
+		}
+		return prefix[:i]
+	}
+
+	return prefix
 }
 
 // PrintColoredBody pretty-prints a JSON body, or prints it unchanged when

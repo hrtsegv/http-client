@@ -5,7 +5,6 @@ package cli
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -18,7 +17,12 @@ import (
 // Run executes the HTTP request described by input, prints the response,
 // and returns the process exit code.
 func Run(input httpmethods.Input) int {
-	if input.NoColor || !color.IsTerminal(os.Stdout.Fd()) {
+	// Formatting is for humans: when stdout is redirected or piped the body
+	// is passed through byte for byte, so `... | jq` sees real JSON.
+	isTerminal := color.IsTerminal(os.Stdout.Fd())
+	raw := input.Raw || !isTerminal
+
+	if input.NoColor || !isTerminal {
 		color.Disable()
 	}
 	defer func() {
@@ -52,13 +56,10 @@ func Run(input httpmethods.Input) int {
 		return exitCode(input, result.Response.StatusCode)
 	}
 
-	body, err := io.ReadAll(result.Response.Body)
-	if err != nil {
+	if err := output.PrintBody(result.Response, raw); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
 	}
-
-	output.PrintColoredBody(body)
 
 	return exitCode(input, result.Response.StatusCode)
 }

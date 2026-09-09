@@ -38,6 +38,7 @@ type Input struct {
 	Fail       bool          `arg:"-f,--fail" help:"Exit with a non-zero status code on HTTP error responses (status >= 400)"`
 	Verbose    bool          `arg:"-v,--verbose" help:"Print the outgoing request and response headers to stderr"`
 	NoColor    bool          `arg:"--no-color" help:"Disable colored output"`
+	Raw        bool          `arg:"--raw" help:"Write the response body verbatim: no JSON formatting and no binary-output guard (implied when stdout is not a terminal)"`
 }
 
 // Version implements go-arg's Versioned interface, enabling an automatic
