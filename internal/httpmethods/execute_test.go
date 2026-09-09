@@ -396,12 +396,68 @@ func TestExec_PlainTextBodyGetsNoJSONContentType(t *testing.T) {
 }
 
 func TestNewHTTPClient_Insecure(t *testing.T) {
-	client := newHTTPClient(Input{Insecure: true})
+	client, err := newHTTPClient(Input{Insecure: true})
+	if err != nil {
+		t.Fatalf("newHTTPClient() error = %v", err)
+	}
 	transport, ok := client.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("Transport = %T, want *http.Transport", client.Transport)
 	}
 	if transport.TLSClientConfig == nil || !transport.TLSClientConfig.InsecureSkipVerify {
 		t.Error("InsecureSkipVerify not set on TLS config")
+	}
+	// Customizing TLS must not cost the environment proxy or HTTP/2.
+	if transport.Proxy == nil {
+		t.Error("environment proxy support dropped from the custom transport")
+	}
+	if !transport.ForceAttemptHTTP2 {
+		t.Error("HTTP/2 disabled by the custom transport")
+	}
+}
+
+func TestNewHTTPClient_Proxy(t *testing.T) {
+	if _, err := newHTTPClient(Input{Proxy: "not-a-proxy"}); err == nil {
+		t.Error("newHTTPClient() error = nil, want error for a proxy without a scheme or host")
+	}
+
+	client, err := newHTTPClient(Input{Proxy: "http://127.0.0.1:8080"})
+	if err != nil {
+		t.Fatalf("newHTTPClient() error = %v", err)
+	}
+
+	transport := client.Transport.(*http.Transport)
+	proxyURL, err := transport.Proxy(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
+	if err != nil {
+		t.Fatalf("Proxy() error = %v", err)
+	}
+	if proxyURL == nil || proxyURL.Host != "127.0.0.1:8080" {
+		t.Errorf("proxy = %v, want http://127.0.0.1:8080", proxyURL)
+	}
+}
+
+func TestExec_ProxyReceivesRequest(t *testing.T) {
+	var proxiedHost string
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxiedHost = r.Host
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer proxy.Close()
+
+	input := Input{
+		HTTPMethod: "GET",
+		URL:        "http://example.com/resource",
+		Proxy:      proxy.URL,
+		Timeout:    5 * time.Second,
+	}
+
+	result, err := RunHttpMethod(input)
+	if err != nil {
+		t.Fatalf("RunHttpMethod() error = %v", err)
+	}
+	_ = result.Response.Body.Close()
+
+	if proxiedHost != "example.com" {
+		t.Errorf("proxied Host = %q, want example.com", proxiedHost)
 	}
 }

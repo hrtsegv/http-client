@@ -74,7 +74,10 @@ func exec(input Input) (*Result, error) {
 		output.PrintVerboseRequest(req, reqBody)
 	}
 
-	client := newHTTPClient(input)
+	client, err := newHTTPClient(input)
+	if err != nil {
+		return nil, err
+	}
 
 	start := time.Now()
 	resp, err := client.Do(req)

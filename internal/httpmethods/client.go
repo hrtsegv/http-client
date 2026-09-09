@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -36,6 +37,7 @@ type Input struct {
 	Output     string        `arg:"-o"`
 	Timeout    time.Duration `arg:"--timeout" default:"30s" help:"Request timeout"`
 	Insecure   bool          `arg:"-k,--insecure" help:"Skip TLS certificate verification"`
+	Proxy      string        `arg:"--proxy" help:"Send the request through this proxy, e.g. http://127.0.0.1:8080 (overrides HTTP_PROXY/HTTPS_PROXY)"`
 	NoRedirect bool          `arg:"--no-redirect" help:"Do not follow redirects"`
 	Auth       string        `arg:"-a,--auth" help:"Basic auth credentials as user:pass"`
 	Fail       bool          `arg:"-f,--fail" help:"Exit with a non-zero status code on HTTP error responses (status >= 400)"`
@@ -67,14 +69,32 @@ func RunHttpMethod(input Input) (*Result, error) {
 }
 
 // newHTTPClient builds an *http.Client configured from input's
-// timeout/TLS/redirect flags.
-func newHTTPClient(input Input) *http.Client {
+// timeout/TLS/redirect/proxy flags.
+func newHTTPClient(input Input) (*http.Client, error) {
 	client := &http.Client{Timeout: input.Timeout}
 
-	if input.Insecure {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	if input.Insecure || input.Proxy != "" {
+		// Clone the default transport rather than building a bare one, so
+		// HTTP_PROXY/HTTPS_PROXY, connection pooling and HTTP/2 keep
+		// working when only TLS verification or the proxy is customized.
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+
+		if input.Insecure {
+			transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 		}
+
+		if input.Proxy != "" {
+			proxyURL, err := url.Parse(input.Proxy)
+			if err != nil {
+				return nil, fmt.Errorf("invalid --proxy value: %w", err)
+			}
+			if proxyURL.Scheme == "" || proxyURL.Host == "" {
+				return nil, fmt.Errorf("invalid --proxy value: %q, expected something like http://127.0.0.1:8080", input.Proxy)
+			}
+			transport.Proxy = http.ProxyURL(proxyURL)
+		}
+
+		client.Transport = transport
 	}
 
 	if input.NoRedirect {
@@ -83,5 +103,5 @@ func newHTTPClient(input Input) *http.Client {
 		}
 	}
 
-	return client
+	return client, nil
 }
