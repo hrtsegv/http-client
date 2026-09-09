@@ -1,9 +1,11 @@
 package output
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"sort"
@@ -12,11 +14,38 @@ import (
 	"github.com/gookit/color"
 )
 
+// Everything printed goes through these writers rather than os.Stdout and
+// os.Stderr directly: stdout is buffered, since a large JSON body would
+// otherwise cost a write syscall per key and per value, and tests can
+// capture output by swapping the writers instead of the process globals.
+var (
+	stdout           = bufio.NewWriter(os.Stdout)
+	out    io.Writer = stdout
+	errOut io.Writer = os.Stderr
+)
+
+// SetOutput redirects the response output writer and the diagnostic
+// writer. A nil writer leaves that stream unchanged.
+func SetOutput(response, diagnostic io.Writer) {
+	if response != nil {
+		out = response
+	}
+	if diagnostic != nil {
+		errOut = diagnostic
+	}
+}
+
+// Flush writes out anything still buffered for stdout. Callers that print
+// must defer it.
+func Flush() error {
+	return stdout.Flush()
+}
+
 // PrintStatusLine prints the response status and how long the request took,
 // colored green/yellow/red for 2xx/3xx/4xx+ responses.
 func PrintStatusLine(resp *http.Response, elapsed time.Duration) {
-	color.New(statusColor(resp.StatusCode)).Printf("%s %s", resp.Proto, resp.Status)
-	fmt.Printf("  (%s)\n", elapsed.Round(time.Millisecond))
+	status := color.New(statusColor(resp.StatusCode)).Sprintf("%s %s", resp.Proto, resp.Status)
+	fmt.Fprintf(out, "%s  (%s)\n", status, elapsed.Round(time.Millisecond))
 }
 
 func statusColor(statusCode int) color.Color {
@@ -31,48 +60,50 @@ func statusColor(statusCode int) color.Color {
 }
 
 // PrintVerboseRequest prints the outgoing request line, headers, and body
-// (if any) to stderr.
+// (if any) as diagnostics.
 func PrintVerboseRequest(req *http.Request, body []byte) {
-	fmt.Fprintf(os.Stderr, "> %s %s\n", req.Method, req.URL.String())
+	fmt.Fprintf(errOut, "> %s %s\n", req.Method, req.URL.String())
 	for key, values := range req.Header {
 		for _, value := range values {
-			fmt.Fprintf(os.Stderr, "> %s: %s\n", key, value)
+			fmt.Fprintf(errOut, "> %s: %s\n", key, value)
 		}
 	}
 	if len(body) > 0 {
-		fmt.Fprintf(os.Stderr, ">\n%s\n", body)
+		fmt.Fprintf(errOut, ">\n%s\n", body)
 	}
 }
 
-// PrintVerboseResponseHeaders prints the response headers to stderr.
+// PrintVerboseResponseHeaders prints the response headers as diagnostics.
 func PrintVerboseResponseHeaders(resp *http.Response) {
 	for key, values := range resp.Header {
 		for _, value := range values {
-			fmt.Fprintf(os.Stderr, "< %s: %s\n", key, value)
+			fmt.Fprintf(errOut, "< %s: %s\n", key, value)
 		}
 	}
 }
 
+// PrintColoredHeaders prints response headers as the command's output.
 func PrintColoredHeaders(headers map[string][]string) {
 	for key, values := range headers {
 		for _, value := range values {
-			color.Bold.Printf("%s: ", key)
-			color.Cyan.Printf("%s\n", value)
+			fmt.Fprintf(out, "%s%s\n", color.Bold.Sprintf("%s: ", key), color.Cyan.Sprint(value))
 		}
 	}
 }
 
+// PrintColoredBody pretty-prints a JSON body, or prints it unchanged when
+// it isn't JSON.
 func PrintColoredBody(body []byte) {
 	var data interface{}
 	err := json.Unmarshal(body, &data)
 	if err == nil {
 		printColoredJSON(data, 0)
-		fmt.Println()
+		fmt.Fprintln(out)
 		return
 	}
 
 	// If parsing fails, print the raw body as plain text
-	fmt.Println(string(body))
+	fmt.Fprintln(out, string(body))
 }
 
 func printColoredJSON(data interface{}, indent int) {
@@ -93,33 +124,35 @@ func printColoredJSON(data interface{}, indent int) {
 
 		for _, key := range keys {
 			value := v[key]
-			fmt.Print(indentStr)
-			keyColor.Printf("%s: ", key)
+			fmt.Fprint(out, indentStr)
+			fmt.Fprint(out, keyColor.Sprintf("%s: ", key))
 			if m, ok := value.(map[string]interface{}); ok {
-				fmt.Println()
+				fmt.Fprintln(out)
 				printColoredJSON(m, indent+1)
 			} else if s, ok := value.([]interface{}); ok {
-				fmt.Println()
+				fmt.Fprintln(out)
 				printColoredJSON(s, indent+1)
 			} else {
-				valueColor.Println(value)
+				fmt.Fprintln(out, valueColor.Sprint(value))
 			}
 		}
 	case []interface{}:
 		for _, item := range v {
 			if m, ok := item.(map[string]interface{}); ok {
 				printColoredJSON(m, indent)
-				fmt.Println()
+				fmt.Fprintln(out)
 			} else {
-				fmt.Print(indentStr)
-				valueColor.Println(item)
+				fmt.Fprint(out, indentStr)
+				fmt.Fprintln(out, valueColor.Sprint(item))
 			}
 		}
 	default:
-		valueColor.Println(v)
+		fmt.Fprintln(out, valueColor.Sprint(v))
 	}
 }
 
+// WriteToFile writes the response body to fileName, replacing any existing
+// contents.
 func WriteToFile(fileName string, data []byte) error {
 	if fileName == "" {
 		return errors.New("missing file name")
@@ -129,7 +162,7 @@ func WriteToFile(fileName string, data []byte) error {
 		return err
 	}
 
-	color.Greenp("Saved to ", fileName, "\n")
+	fmt.Fprint(out, color.Green.Sprintf("Saved to %s\n", fileName))
 
 	return nil
 }

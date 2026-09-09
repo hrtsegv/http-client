@@ -21,6 +21,11 @@ func Run(input httpmethods.Input) int {
 	if input.NoColor || !color.IsTerminal(os.Stdout.Fd()) {
 		color.Disable()
 	}
+	defer func() {
+		if err := output.Flush(); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+		}
+	}()
 
 	result, err := httpmethods.RunHttpMethod(input)
 	if err != nil {

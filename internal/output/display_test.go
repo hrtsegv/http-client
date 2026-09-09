@@ -1,7 +1,7 @@
 package output
 
 import (
-	"io"
+	"bytes"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,44 +12,30 @@ import (
 	"github.com/gookit/color"
 )
 
-// captureStdout redirects os.Stdout for the duration of fn and returns
-// everything written to it.
-func captureStdout(t *testing.T, fn func()) string {
+// capture collects what fn writes to the output and diagnostic writers,
+// with color disabled so assertions see plain text.
+func capture(t *testing.T, fn func()) (stdout, stderr string) {
 	t.Helper()
 
-	orig := color.Disable()
+	origEnable := color.Disable()
+	origOut, origErr := out, errOut
 	defer func() {
-		color.Enable = orig
+		color.Enable = origEnable
+		out, errOut = origOut, origErr
 	}()
 
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe() error = %v", err)
-	}
-	origStdout := os.Stdout
-	os.Stdout = w
-	color.SetOutput(w)
-	defer func() {
-		os.Stdout = origStdout
-		color.SetOutput(origStdout)
-	}()
+	var outBuf, errBuf bytes.Buffer
+	SetOutput(&outBuf, &errBuf)
 
 	fn()
 
-	if err := w.Close(); err != nil {
-		t.Fatalf("w.Close() error = %v", err)
-	}
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("io.ReadAll() error = %v", err)
-	}
-	return string(out)
+	return outBuf.String(), errBuf.String()
 }
 
 func TestPrintColoredBody_SortedKeys(t *testing.T) {
 	body := []byte(`{"zebra":1,"apple":2,"mango":3}`)
 
-	out := captureStdout(t, func() {
+	out, _ := capture(t, func() {
 		PrintColoredBody(body)
 	})
 
@@ -63,7 +49,7 @@ func TestPrintColoredBody_SortedKeys(t *testing.T) {
 }
 
 func TestPrintColoredBody_NonJSONIsPassedThrough(t *testing.T) {
-	out := captureStdout(t, func() {
+	out, _ := capture(t, func() {
 		PrintColoredBody([]byte("plain text"))
 	})
 
@@ -75,7 +61,7 @@ func TestPrintColoredBody_NonJSONIsPassedThrough(t *testing.T) {
 func TestPrintStatusLine(t *testing.T) {
 	resp := &http.Response{Proto: "HTTP/1.1", Status: "200 OK", StatusCode: 200}
 
-	out := captureStdout(t, func() {
+	out, _ := capture(t, func() {
 		PrintStatusLine(resp, 42*time.Millisecond)
 	})
 
@@ -91,8 +77,10 @@ func TestWriteToFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "out.json")
 
-	if err := WriteToFile(path, []byte("hello")); err != nil {
-		t.Fatalf("WriteToFile() error = %v", err)
+	var writeErr error
+	capture(t, func() { writeErr = WriteToFile(path, []byte("hello")) })
+	if writeErr != nil {
+		t.Fatalf("WriteToFile() error = %v", writeErr)
 	}
 
 	got, err := os.ReadFile(path)
@@ -104,8 +92,9 @@ func TestWriteToFile(t *testing.T) {
 	}
 
 	// Writing again should overwrite, not append.
-	if err := WriteToFile(path, []byte("world")); err != nil {
-		t.Fatalf("WriteToFile() (overwrite) error = %v", err)
+	capture(t, func() { writeErr = WriteToFile(path, []byte("world")) })
+	if writeErr != nil {
+		t.Fatalf("WriteToFile() (overwrite) error = %v", writeErr)
 	}
 	got, err = os.ReadFile(path)
 	if err != nil {

@@ -8,3 +8,11 @@ linters:
     - ineffassign
     - staticcheck
     - unused
+  settings:
+    errcheck:
+      # Display writes go to a buffered stdout; a real write failure
+      # surfaces once from output.Flush(), which cli.Run does check.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
