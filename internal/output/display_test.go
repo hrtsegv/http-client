@@ -48,6 +48,41 @@ func TestPrintColoredBody_SortedKeys(t *testing.T) {
 	}
 }
 
+func TestPrintColoredBody_PreservesLargeNumbers(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"int64 id", `{"id":12345678901234567890}`, "12345678901234567890"},
+		{"high precision", `{"v":0.1234567890123456789}`, "0.1234567890123456789"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, _ := capture(t, func() {
+				PrintColoredBody([]byte(tt.body))
+			})
+
+			if !strings.Contains(out, tt.want) {
+				t.Errorf("got %q, want it to contain %q", strings.TrimSpace(out), tt.want)
+			}
+		})
+	}
+}
+
+func TestPrintColoredBody_TrailingContentPrintsVerbatim(t *testing.T) {
+	body := `{"a":1} not json anymore`
+
+	out, _ := capture(t, func() {
+		PrintColoredBody([]byte(body))
+	})
+
+	if strings.TrimSpace(out) != body {
+		t.Errorf("got %q, want the body verbatim %q", strings.TrimSpace(out), body)
+	}
+}
+
 func TestPrintColoredBody_NonJSONIsPassedThrough(t *testing.T) {
 	out, _ := capture(t, func() {
 		PrintColoredBody([]byte("plain text"))

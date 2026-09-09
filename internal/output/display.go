@@ -2,6 +2,7 @@ package output
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gookit/color"
@@ -96,25 +98,27 @@ func PrintColoredHeaders(headers map[string][]string) {
 // PrintColoredBody pretty-prints a JSON body, or prints it unchanged when
 // it isn't JSON.
 func PrintColoredBody(body []byte) {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	// Without UseNumber every number decodes as a float64, which prints
+	// large integers such as IDs as 1.2345678901234567e+19.
+	decoder.UseNumber()
+
 	var data interface{}
-	err := json.Unmarshal(body, &data)
-	if err == nil {
-		printColoredJSON(data, 0)
-		fmt.Fprintln(out)
+	// Anything trailing the first value means this isn't a JSON document,
+	// so fall through and print it verbatim rather than truncating it.
+	if err := decoder.Decode(&data); err != nil || decoder.More() {
+		fmt.Fprintln(out, string(body))
 		return
 	}
 
-	// If parsing fails, print the raw body as plain text
-	fmt.Fprintln(out, string(body))
+	printColoredJSON(data, 0)
+	fmt.Fprintln(out)
 }
 
 func printColoredJSON(data interface{}, indent int) {
 	keyColor := color.New(color.FgLightGreen)
 	valueColor := color.New(color.FgLightCyan)
-	indentStr := ""
-	for i := 0; i < indent; i++ {
-		indentStr += "  "
-	}
+	indentStr := strings.Repeat("  ", indent)
 
 	switch v := data.(type) {
 	case map[string]interface{}:
