@@ -28,7 +28,10 @@ func exec(input Input) (*Result, error) {
 	reqBody := body.data
 
 	var bodyReader io.Reader = http.NoBody
-	if len(reqBody) > 0 {
+	switch {
+	case body.reader != nil:
+		bodyReader = body.reader
+	case len(reqBody) > 0:
 		bodyReader = bytes.NewReader(reqBody)
 	}
 
@@ -88,9 +91,11 @@ func exec(input Input) (*Result, error) {
 }
 
 // requestBody is the body to send plus the Content-Type it implies, which
-// is applied only when the caller didn't set one with -H.
+// is applied only when the caller didn't set one with -H. A streamed body
+// sets reader instead of data and is never held in memory.
 type requestBody struct {
 	data        []byte
+	reader      io.Reader
 	contentType string
 }
 
@@ -107,11 +112,21 @@ func resolveBody(input Input) (requestBody, error) {
 	if len(input.Form) > 0 {
 		given = append(given, "--form")
 	}
+	if len(input.Multipart) > 0 {
+		given = append(given, "--multipart")
+	}
 	if len(given) > 1 {
 		return requestBody{}, fmt.Errorf("use only one of %s", strings.Join(given, ", "))
 	}
 
 	switch {
+	case len(input.Multipart) > 0:
+		reader, contentType, err := utilities.MultipartBody(input.Multipart)
+		if err != nil {
+			return requestBody{}, err
+		}
+		return requestBody{reader: reader, contentType: contentType}, nil
+
 	case len(input.Data) > 0:
 		data, err := utilities.ParseDataFields(input.Data)
 		if err != nil {

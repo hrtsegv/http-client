@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -286,6 +288,90 @@ func TestExec_FormBody(t *testing.T) {
 	}
 	if got := gotForm["lang"]; len(got) != 2 {
 		t.Errorf("lang = %v, want two values", got)
+	}
+}
+
+func TestExec_MultipartUpload(t *testing.T) {
+	const fileContent = "col1,col2\n1,2\n"
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "data.csv")
+	if err := os.WriteFile(path, []byte(fileContent), 0o644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	var (
+		gotField    string
+		gotFileName string
+		gotFileBody string
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Errorf("ParseMultipartForm() error = %v", err)
+			return
+		}
+		gotField = r.FormValue("description")
+
+		file, header, err := r.FormFile("upload")
+		if err != nil {
+			t.Errorf("FormFile() error = %v", err)
+			return
+		}
+		defer func() { _ = file.Close() }()
+
+		gotFileName = header.Filename
+		content, err := io.ReadAll(file)
+		if err != nil {
+			t.Errorf("reading uploaded file: %v", err)
+			return
+		}
+		gotFileBody = string(content)
+	}))
+	defer server.Close()
+
+	input := Input{
+		HTTPMethod: "POST",
+		URL:        server.URL,
+		Multipart:  []string{"description=monthly export", "upload=@" + path},
+		Timeout:    5 * time.Second,
+	}
+
+	result, err := RunHttpMethod(input)
+	if err != nil {
+		t.Fatalf("RunHttpMethod() error = %v", err)
+	}
+	_ = result.Response.Body.Close()
+
+	if gotField != "monthly export" {
+		t.Errorf("description = %q, want %q", gotField, "monthly export")
+	}
+	if gotFileName != "data.csv" {
+		t.Errorf("uploaded file name = %q, want data.csv", gotFileName)
+	}
+	if gotFileBody != fileContent {
+		t.Errorf("uploaded content = %q, want %q", gotFileBody, fileContent)
+	}
+}
+
+func TestExec_MultipartMissingFileFailsBeforeSending(t *testing.T) {
+	var reached bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+	}))
+	defer server.Close()
+
+	input := Input{
+		HTTPMethod: "POST",
+		URL:        server.URL,
+		Multipart:  []string{"upload=@" + filepath.Join(t.TempDir(), "does-not-exist")},
+		Timeout:    5 * time.Second,
+	}
+
+	if _, err := RunHttpMethod(input); err == nil {
+		t.Fatal("RunHttpMethod() error = nil, want error for a missing upload file")
+	}
+	if reached {
+		t.Error("request was sent despite the missing file")
 	}
 }
 

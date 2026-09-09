@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -85,6 +87,90 @@ func ParseKeyValuePairs(fields []string, flagName string) ([]KeyValue, error) {
 	}
 
 	return pairs, nil
+}
+
+// MultipartBody builds a multipart/form-data body from repeated
+// "field=value" and "field=@path" arguments, returning the body reader and
+// the Content-Type carrying its boundary.
+//
+// The body is produced as it is read rather than assembled up front, so
+// uploading a large file never holds the file in memory. Referenced files
+// are opened before returning, so a bad path fails before any request is
+// sent instead of halfway through the upload.
+func MultipartBody(fields []string) (io.Reader, string, error) {
+	pairs, err := ParseKeyValuePairs(fields, "--multipart")
+	if err != nil {
+		return nil, "", err
+	}
+
+	files, err := openMultipartFiles(pairs)
+	if err != nil {
+		return nil, "", err
+	}
+
+	reader, writer := io.Pipe()
+	form := multipart.NewWriter(writer)
+
+	go func() {
+		writeErr := writeMultipartFields(form, pairs, files)
+		for _, file := range files {
+			_ = file.Close()
+		}
+		if writeErr == nil {
+			writeErr = form.Close()
+		}
+		// Closing with the error surfaces it on the reader side, which
+		// fails the request rather than sending a truncated body.
+		_ = writer.CloseWithError(writeErr)
+	}()
+
+	return reader, form.FormDataContentType(), nil
+}
+
+// openMultipartFiles opens every "@path" value, keyed by its position in
+// pairs.
+func openMultipartFiles(pairs []KeyValue) (map[int]*os.File, error) {
+	files := make(map[int]*os.File)
+
+	for i, pair := range pairs {
+		path, isFile := strings.CutPrefix(pair.Value, "@")
+		if !isFile {
+			continue
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			for _, opened := range files {
+				_ = opened.Close()
+			}
+			return nil, err
+		}
+		files[i] = file
+	}
+
+	return files, nil
+}
+
+func writeMultipartFields(form *multipart.Writer, pairs []KeyValue, files map[int]*os.File) error {
+	for i, pair := range pairs {
+		file, isFile := files[i]
+		if !isFile {
+			if err := form.WriteField(pair.Key, pair.Value); err != nil {
+				return err
+			}
+			continue
+		}
+
+		part, err := form.CreateFormFile(pair.Key, filepath.Base(file.Name()))
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(part, file); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ParseFormFields builds an application/x-www-form-urlencoded body from

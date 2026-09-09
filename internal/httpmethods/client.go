@@ -30,6 +30,7 @@ type Input struct {
 	Body       string        `arg:"-b,--body" help:"Request body: raw text/JSON, @path to read from a file, or - to read from stdin"`
 	Data       []string      `arg:"-d,--data,separate" help:"Body field as key=value, repeatable; builds a JSON object"`
 	Form       []string      `arg:"--form,separate" help:"Body field as key=value, repeatable; sends application/x-www-form-urlencoded"`
+	Multipart  []string      `arg:"-F,--multipart,separate" help:"Multipart field as key=value or key=@path to upload a file, repeatable; sends multipart/form-data"`
 	Query      []string      `arg:"--query,separate" help:"Query parameter as key=value, repeatable; merged into the URL and encoded"`
 	Header     []string      `arg:"-H,--header,separate"`
 	Output     string        `arg:"-o"`
