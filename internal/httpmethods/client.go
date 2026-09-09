@@ -29,6 +29,7 @@ type Input struct {
 	URL        string        `arg:"-u,--url,required" help:"Request URL"`
 	Body       string        `arg:"-b,--body" help:"Request body: raw text/JSON, @path to read from a file, or - to read from stdin. Mutually exclusive with --data"`
 	Data       []string      `arg:"-d,--data,separate" help:"Body field as key=value, repeatable; builds a JSON object. Mutually exclusive with --body"`
+	Query      []string      `arg:"--query,separate" help:"Query parameter as key=value, repeatable; merged into the URL and encoded"`
 	Header     []string      `arg:"-H,--header,separate"`
 	Output     string        `arg:"-o"`
 	Timeout    time.Duration `arg:"--timeout" default:"30s" help:"Request timeout"`

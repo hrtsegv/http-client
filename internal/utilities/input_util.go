@@ -57,10 +57,17 @@ func ParseBody(bodyStr string) ([]byte, error) {
 	}
 }
 
-// ParseDataFields builds a JSON object body from repeated "key=value"
-// fields, e.g. from a -d/--data flag.
-func ParseDataFields(fields []string) ([]byte, error) {
-	data := make(map[string]string, len(fields))
+// KeyValue is one parsed "key=value" argument.
+type KeyValue struct {
+	Key   string
+	Value string
+}
+
+// ParseKeyValuePairs splits repeated "key=value" arguments, keeping them in
+// the order given and leaving any further '=' in the value. flagName names
+// the flag being parsed so errors can point at it.
+func ParseKeyValuePairs(fields []string, flagName string) ([]KeyValue, error) {
+	pairs := make([]KeyValue, 0, len(fields))
 
 	for _, f := range fields {
 		f = strings.TrimSpace(f)
@@ -70,10 +77,26 @@ func ParseDataFields(fields []string) ([]byte, error) {
 
 		key, value, ok := strings.Cut(f, "=")
 		if !ok {
-			return nil, fmt.Errorf("invalid data field: %s. Expected 'key=value'", f)
+			return nil, fmt.Errorf("invalid %s value: %s. Expected 'key=value'", flagName, f)
 		}
 
-		data[strings.TrimSpace(key)] = value
+		pairs = append(pairs, KeyValue{Key: strings.TrimSpace(key), Value: value})
+	}
+
+	return pairs, nil
+}
+
+// ParseDataFields builds a JSON object body from repeated "key=value"
+// fields, e.g. from a -d/--data flag.
+func ParseDataFields(fields []string) ([]byte, error) {
+	pairs, err := ParseKeyValuePairs(fields, "--data")
+	if err != nil {
+		return nil, err
+	}
+
+	data := make(map[string]string, len(pairs))
+	for _, pair := range pairs {
+		data[pair.Key] = pair.Value
 	}
 
 	return json.Marshal(data)

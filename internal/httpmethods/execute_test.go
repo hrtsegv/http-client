@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -170,6 +171,44 @@ func TestExec_Insecure(t *testing.T) {
 
 	if result.Response.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want %d", result.Response.StatusCode, http.StatusOK)
+	}
+}
+
+func TestExec_QueryParameters(t *testing.T) {
+	var gotQuery url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+	}))
+	defer server.Close()
+
+	input := Input{
+		HTTPMethod: "GET",
+		URL:        server.URL + "/search?existing=kept",
+		Query:      []string{"q=hello world", "tag=a", "tag=b"},
+		Timeout:    5 * time.Second,
+	}
+
+	result, err := RunHttpMethod(input)
+	if err != nil {
+		t.Fatalf("RunHttpMethod() error = %v", err)
+	}
+	_ = result.Response.Body.Close()
+
+	if got := gotQuery.Get("q"); got != "hello world" {
+		t.Errorf("q = %q, want %q", got, "hello world")
+	}
+	if got := gotQuery["tag"]; len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Errorf("tag = %v, want [a b]", got)
+	}
+	if got := gotQuery.Get("existing"); got != "kept" {
+		t.Errorf("existing = %q, want kept (query already in the URL must survive)", got)
+	}
+}
+
+func TestBuildURL_InvalidQueryField(t *testing.T) {
+	_, err := buildURL(Input{URL: "http://example.com", Query: []string{"missing-equals"}})
+	if err == nil {
+		t.Fatal("buildURL() error = nil, want error for a malformed --query value")
 	}
 }
 

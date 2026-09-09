@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -30,7 +31,12 @@ func exec(input Input) (*Result, error) {
 		bodyReader = bytes.NewReader(reqBody)
 	}
 
-	req, err := http.NewRequest(strings.ToUpper(input.HTTPMethod), normalizeURL(input.URL), bodyReader)
+	requestURL, err := buildURL(input)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(strings.ToUpper(input.HTTPMethod), requestURL, bodyReader)
 	if err != nil {
 		return nil, err
 	}
@@ -92,6 +98,33 @@ func resolveBody(input Input) ([]byte, error) {
 	}
 
 	return utilities.ParseBody(input.Body)
+}
+
+// buildURL normalizes the URL and merges any --query parameters into it,
+// encoding them so values with spaces or '&' survive the trip. Repeating a
+// key adds another value rather than replacing it.
+func buildURL(input Input) (string, error) {
+	parsed, err := url.Parse(normalizeURL(input.URL))
+	if err != nil {
+		return "", err
+	}
+
+	if len(input.Query) == 0 {
+		return parsed.String(), nil
+	}
+
+	pairs, err := utilities.ParseKeyValuePairs(input.Query, "--query")
+	if err != nil {
+		return "", err
+	}
+
+	values := parsed.Query()
+	for _, pair := range pairs {
+		values.Add(pair.Key, pair.Value)
+	}
+	parsed.RawQuery = values.Encode()
+
+	return parsed.String(), nil
 }
 
 // normalizeURL defaults to https:// when the given URL has no scheme,
