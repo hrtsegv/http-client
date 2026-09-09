@@ -34,8 +34,8 @@ type Input struct {
 	Form       []string      `arg:"--form,separate" help:"Body field as key=value, repeatable; sends application/x-www-form-urlencoded"`
 	Multipart  []string      `arg:"-F,--multipart,separate" help:"Multipart field as key=value or key=@path to upload a file, repeatable; sends multipart/form-data"`
 	Query      []string      `arg:"--query,separate" help:"Query parameter as key=value, repeatable; merged into the URL and encoded"`
-	Header     []string      `arg:"-H,--header,separate"`
-	Output     string        `arg:"-o"`
+	Header     []string      `arg:"-H,--header,separate" help:"Request header as 'Key: Value' or as a JSON object, repeatable"`
+	Output     string        `arg:"-o,--output" help:"Write the response body to this file instead of printing it"`
 	Timeout    time.Duration `arg:"--timeout" default:"30s" help:"Request timeout"`
 	Retry      int           `arg:"--retry" help:"Retry transient failures (network errors, 429, and 5xx) up to this many times"`
 	RetryDelay time.Duration `arg:"--retry-delay" default:"500ms" help:"Base delay before a retry; doubles each attempt, and the server's Retry-After wins when present"`
